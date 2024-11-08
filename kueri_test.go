@@ -147,3 +147,9 @@ func TestJoinsMustBeValid(t *testing.T) {
 	_, _, err := qb().Select(User{}, "").LeftJoin(SongTack{}, "").ToSql()
 	assert.Error(t, err)
 }
+
+func TestCorrectArgOrder(t *testing.T) {
+	_, args, _ := qb().Select(User{}, "", 1, 2).LeftJoin(SongTack{}, "", 3, 4).LeftJoin(UserSong{}, "", 5, 6).ToSql()
+	// user -> user song -> song track
+	assert.Equal(t, args, []any{1, 2, 5, 6, 3, 4})
+}
