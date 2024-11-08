@@ -1,0 +1,23 @@
+services:
+  postgres_main:
+    image: "postgres:15"
+    environment:
+      POSTGRES_USER: "u"
+      POSTGRES_PASSWORD: "p"
+      POSTGRES_DB: "db"
+    volumes:
+      - "postgres_main:/var/lib/postgresql/data"
+
+  pgadmin_main:
+    image: "dpage/pgadmin4"
+    ports:
+      - 8080:80
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "d@d.com"
+      PGADMIN_DEFAULT_PASSWORD: "p"
+    volumes:
+      - "pgadmin_main:/var/lib/pgadmin"
+
+volumes:
+  postgres_main:
+  pgadmin_main:
