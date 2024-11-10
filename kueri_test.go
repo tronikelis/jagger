@@ -153,3 +153,16 @@ func TestCorrectArgOrder(t *testing.T) {
 	// user -> user song -> song track
 	assert.Equal(t, args, []any{1, 2, 5, 6, 3, 4})
 }
+
+type UserWithSpace struct {
+	kueri.BaseTable `db:"user with space"`
+
+	ID   int       `db:"id with space" json:"id with space"`
+	Song *UserSong `db:", fk:song id" json:"song with space"`
+}
+
+func TestQuotes(t *testing.T) {
+	sql, _, _ := qb().Select(UserWithSpace{}, "").LeftJoin(UserSong{}, "").ToSql()
+
+	assert.Equal(t, trim(sql), `select json_agg(json_build_object('id with space', "user with space"."id with space",'song with space', json_build_object('id', "user_song"."id",'user_id', "user_song"."user_id"))) "_json"  from "user with space" left join "user_song" on "user_song"."id" = "user with space"."song id"`)
+}
