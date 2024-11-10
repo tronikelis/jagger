@@ -45,7 +45,7 @@ func TestSimpleQuery(t *testing.T) {
 		Select(User{}, "").
 		ToSql()
 
-	assert.Equal(t, trim(sql), "select json_agg(json_build_object('id', user.id)) _json  from user")
+	assert.Equal(t, trim(sql), `select json_agg(json_build_object('id', "user"."id")) "_json"  from "user"`)
 	assert.Equal(t, args, []any{})
 	assert.Equal(t, err, nil)
 
@@ -53,7 +53,7 @@ func TestSimpleQuery(t *testing.T) {
 		Select(User{}, "user subquery").
 		ToSql()
 
-	assert.Equal(t, trim(sql), "select json_agg(json_build_object('id', user.id)) _json  from (user subquery) user")
+	assert.Equal(t, trim(sql), `select json_agg(json_build_object('id', "user"."id")) "_json"  from (user subquery) "user"`)
 	assert.Equal(t, args, []any{})
 	assert.Equal(t, err, nil)
 }
@@ -64,7 +64,7 @@ func TestOneToMany(t *testing.T) {
 		LeftJoin(UserSong{}, "").
 		ToSql()
 
-	assert.Equal(t, trim(sql), "select json_agg(json_build_object('id', user.id,'songs', songs_json)) _json  from user left join (select user_song.user_id, json_agg(json_build_object('id', user_song.id,'user_id', user_song.user_id)) songs_json  from user_song  group by user_song.user_id) user_song on user_song.user_id = user.id")
+	assert.Equal(t, trim(sql), `select json_agg(json_build_object('id', "user"."id",'songs', "songs_json")) "_json"  from "user" left join (select "user_song"."user_id", json_agg(json_build_object('id', "user_song"."id",'user_id', "user_song"."user_id")) "songs_json"  from "user_song"  group by "user_song"."user_id") "user_song" on "user_song"."user_id" = "user"."id"`)
 	assert.Equal(t, args, []any{})
 	assert.Equal(t, err, nil)
 
@@ -73,7 +73,7 @@ func TestOneToMany(t *testing.T) {
 		LeftJoin(UserSong{}, "song sub").
 		ToSql()
 
-	assert.Equal(t, trim(sql), "select json_agg(json_build_object('id', user.id,'songs', songs_json)) _json  from user left join (select user_song.user_id, json_agg(json_build_object('id', user_song.id,'user_id', user_song.user_id)) songs_json  from (song sub) user_song  group by user_song.user_id) user_song on user_song.user_id = user.id")
+	assert.Equal(t, trim(sql), `select json_agg(json_build_object('id', "user"."id",'songs', "songs_json")) "_json"  from "user" left join (select "user_song"."user_id", json_agg(json_build_object('id', "user_song"."id",'user_id', "user_song"."user_id")) "songs_json"  from (song sub) "user_song"  group by "user_song"."user_id") "user_song" on "user_song"."user_id" = "user"."id"`)
 	assert.Equal(t, args, []any{})
 	assert.Equal(t, err, nil)
 }
@@ -84,7 +84,7 @@ func TestManyToOne(t *testing.T) {
 		LeftJoin(User{}, "").
 		ToSql()
 
-	assert.Equal(t, trim(sql), "select json_agg(json_build_object('id', user_song.id,'user_id', user_song.user_id,'user', json_build_object('id', user.id))) _json  from user_song left join user on user.id = user_song.user_id")
+	assert.Equal(t, trim(sql), `select json_agg(json_build_object('id', "user_song"."id",'user_id', "user_song"."user_id",'user', json_build_object('id', "user"."id"))) "_json"  from "user_song" left join "user" on "user"."id" = "user_song"."user_id"`)
 	assert.Equal(t, args, []any{})
 	assert.Equal(t, err, nil)
 }
@@ -96,7 +96,7 @@ func TestSkipCyclic(t *testing.T) {
 		LeftJoin(User{}, "").
 		ToSql()
 
-	assert.Equal(t, trim(sql), "select json_agg(json_build_object('id', user.id,'songs', songs_json)) _json  from user left join (select user_song.user_id, json_agg(json_build_object('id', user_song.id,'user_id', user_song.user_id)) songs_json  from user_song  group by user_song.user_id) user_song on user_song.user_id = user.id")
+	assert.Equal(t, trim(sql), `select json_agg(json_build_object('id', "user"."id",'songs', "songs_json")) "_json"  from "user" left join (select "user_song"."user_id", json_agg(json_build_object('id', "user_song"."id",'user_id', "user_song"."user_id")) "songs_json"  from "user_song"  group by "user_song"."user_id") "user_song" on "user_song"."user_id" = "user"."id"`)
 	assert.Equal(t, args, []any{})
 	assert.Equal(t, err, nil)
 }
@@ -126,7 +126,7 @@ func TestBoth(t *testing.T) {
 		LeftJoin(SongTack{}, "").
 		ToSql()
 
-	assert.Equal(t, trim(sql), "select json_agg(json_build_object('id', user.id,'songs', songs_json)) _json  from user left join (select user_song.user_id, json_agg(json_build_object('id', user_song.id,'user_id', user_song.user_id,'tracks', tracks_json)) songs_json  from user_song left join (select song_track.song_id, json_agg(json_build_object('id', song_track.id,'song_id', song_track.song_id)) tracks_json  from song_track  group by song_track.song_id) song_track on song_track.song_id = user_song.id group by user_song.user_id) user_song on user_song.user_id = user.id")
+	assert.Equal(t, trim(sql), `select json_agg(json_build_object('id', "user"."id",'songs', "songs_json")) "_json"  from "user" left join (select "user_song"."user_id", json_agg(json_build_object('id', "user_song"."id",'user_id', "user_song"."user_id",'tracks', "tracks_json")) "songs_json"  from "user_song" left join (select "song_track"."song_id", json_agg(json_build_object('id', "song_track"."id",'song_id', "song_track"."song_id")) "tracks_json"  from "song_track"  group by "song_track"."song_id") "song_track" on "song_track"."song_id" = "user_song"."id" group by "user_song"."user_id") "user_song" on "user_song"."user_id" = "user"."id"`)
 	assert.Equal(t, args, []any{})
 	assert.Equal(t, err, nil)
 }
@@ -152,4 +152,17 @@ func TestCorrectArgOrder(t *testing.T) {
 	_, args, _ := qb().Select(User{}, "", 1, 2).LeftJoin(SongTack{}, "", 3, 4).LeftJoin(UserSong{}, "", 5, 6).ToSql()
 	// user -> user song -> song track
 	assert.Equal(t, args, []any{1, 2, 5, 6, 3, 4})
+}
+
+type UserWithSpace struct {
+	kueri.BaseTable `db:"user with space"`
+
+	ID   int       `db:"id with space" json:"id with space"`
+	Song *UserSong `db:", fk:song id" json:"song with space"`
+}
+
+func TestQuotes(t *testing.T) {
+	sql, _, _ := qb().Select(UserWithSpace{}, "").LeftJoin(UserSong{}, "").ToSql()
+
+	assert.Equal(t, trim(sql), `select json_agg(json_build_object('id with space', "user with space"."id with space",'song with space', json_build_object('id', "user_song"."id",'user_id', "user_song"."user_id"))) "_json"  from "user with space" left join "user_song" on "user_song"."id" = "user with space"."song id"`)
 }
