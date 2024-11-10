@@ -187,3 +187,17 @@ func (qb *QueryBuilder) InnerJoin(table any, subQuery string, args ...any) *Quer
 func (qb *QueryBuilder) FullOuterJoin(table any, subQuery string, args ...any) *QueryBuilder {
 	return qb.Join(relation.FULL_OUTER_JOIN, table, subQuery, args...)
 }
+
+func (qb *QueryBuilder) Clone() *QueryBuilder {
+	copied := NewQueryBuilder()
+
+	// only a shallow copy
+	// the caller could still change for example
+	// the arguments, but this is fine
+	copied.target = qb.target
+	for k, v := range qb.joins {
+		copied.joins[k] = v
+	}
+
+	return copied
+}

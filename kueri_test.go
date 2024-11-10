@@ -166,3 +166,14 @@ func TestQuotes(t *testing.T) {
 
 	assert.Equal(t, trim(sql), `select json_agg(json_build_object('id with space', "user with space"."id with space",'song with space', json_build_object('id', "user_song"."id",'user_id', "user_song"."user_id"))) "_json"  from "user with space" left join "user_song" on "user_song"."id" = "user with space"."song id"`)
 }
+
+func TestClone(t *testing.T) {
+	q := qb()
+	qClone := q.Clone()
+
+	qClone.Select(User{}, "").LeftJoin(UserSong{}, "")
+
+	// q does not have a select statement
+	_, _, err := q.ToSql()
+	assert.Error(t, err)
+}
