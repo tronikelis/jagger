@@ -9,27 +9,27 @@ import (
 )
 
 type SongTack struct {
-	kueri.BaseTable `db:"song_track"`
+	kueri.BaseTable `kueri:"song_track"`
 
-	ID     int       `db:"id, pk:" json:"id"`
-	SongId int       `db:"song_id" json:"song_id"`
-	Song   *UserSong `db:", fk:song_id" json:"song"`
+	ID     int       `kueri:"id, pk:" json:"id"`
+	SongId int       `kueri:"song_id" json:"song_id"`
+	Song   *UserSong `kueri:", fk:song_id" json:"song"`
 }
 
 type UserSong struct {
-	kueri.BaseTable `db:"user_song"`
+	kueri.BaseTable `kueri:"user_song"`
 
-	ID     int        `db:"id, pk:" json:"id"`
-	UserId int        `db:"user_id" json:"user_id"`
-	User   *User      `db:", fk:user_id" json:"user"`
-	Tracks []SongTack `db:", fk:song_id" json:"tracks"`
+	ID     int        `kueri:"id, pk:" json:"id"`
+	UserId int        `kueri:"user_id" json:"user_id"`
+	User   *User      `kueri:", fk:user_id" json:"user"`
+	Tracks []SongTack `kueri:", fk:song_id" json:"tracks"`
 }
 
 type User struct {
-	kueri.BaseTable `db:"user"`
+	kueri.BaseTable `kueri:"user"`
 
-	ID    int        `db:"id, pk:" json:"id"`
-	Songs []UserSong `db:", fk:user_id" json:"songs"`
+	ID    int        `kueri:"id, pk:" json:"id"`
+	Songs []UserSong `kueri:", fk:user_id" json:"songs"`
 }
 
 func qb() *kueri.QueryBuilder {
@@ -155,10 +155,10 @@ func TestCorrectArgOrder(t *testing.T) {
 }
 
 type UserWithSpace struct {
-	kueri.BaseTable `db:"user with space"`
+	kueri.BaseTable `kueri:"user with space"`
 
-	ID   int       `db:"id with space" json:"id with space"`
-	Song *UserSong `db:", fk:song id" json:"song with space"`
+	ID   int       `kueri:"id with space" json:"id with space"`
+	Song *UserSong `kueri:", fk:song id" json:"song with space"`
 }
 
 func TestQuotes(t *testing.T) {

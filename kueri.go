@@ -36,7 +36,7 @@ func (qb *QueryBuilder) toRelation(target any, seen map[string]bool, args *[]any
 		return nil
 	}
 
-	name := tags.NewDbTag(t.Field(0).Tag.Get("db")).Name
+	name := tags.NewKueriTag(t.Field(0).Tag.Get("kueri")).Name
 	join, joinExists := qb.joins[name]
 
 	if seen[name] || !joinExists {
@@ -55,17 +55,17 @@ func (qb *QueryBuilder) toRelation(target any, seen map[string]bool, args *[]any
 	for i := 1; i < t.NumField(); i++ {
 		f := t.Field(i)
 
-		db := tags.NewDbTag(f.Tag.Get("db"))
+		tag := tags.NewKueriTag(f.Tag.Get("kueri"))
 		jsonTag := tags.ParseSliceTag(f.Tag.Get("json"))
 
-		if db.PK {
-			pk = db.Name
+		if tag.PK {
+			pk = tag.Name
 		}
 
-		if db.FK == "" {
+		if tag.FK == "" {
 			fields = append(fields, relation.Field{
 				Json:   jsonTag[0],
-				Column: db.Name,
+				Column: tag.Name,
 			})
 			continue
 		}
@@ -88,7 +88,7 @@ func (qb *QueryBuilder) toRelation(target any, seen map[string]bool, args *[]any
 			typ = typ.Elem()
 		}
 
-		rel.FK = db.FK
+		rel.FK = tag.FK
 		rel.JsonAggName = jsonTag[0]
 
 		switch typ.Kind() {
@@ -138,7 +138,7 @@ func tableName(structure any) (string, error) {
 		return "", errors.New("non table passed to dbTable")
 	}
 
-	return tags.NewDbTag(t.Field(0).Tag.Get("db")).Name, nil
+	return tags.NewKueriTag(t.Field(0).Tag.Get("kueri")).Name, nil
 }
 
 func NewQueryBuilder() *QueryBuilder {
