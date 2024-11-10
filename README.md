@@ -38,6 +38,7 @@ FROM
 - [kueri](#kueri)
   - [Usage](#usage)
     - [Struct tags](#struct-tags)
+    - [Querying](#querying)
 <!--toc:end-->
 
 
