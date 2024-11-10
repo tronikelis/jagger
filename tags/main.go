@@ -2,14 +2,14 @@ package tags
 
 import "strings"
 
-type DbTag struct {
+type KueriTag struct {
 	Name string
 	PK   bool
 	FK   string
 }
 
-func NewDbTag(tag string) DbTag {
-	dt := DbTag{}
+func NewKueriTag(tag string) KueriTag {
+	dt := KueriTag{}
 
 	comma := strings.Split(tag, ",")
 	dt.Name = strings.TrimSpace(comma[0])
