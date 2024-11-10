@@ -3,12 +3,21 @@ package relation
 import (
 	"fmt"
 	"reflect"
+	"strings"
 )
 
 type BaseTable struct{}
 
 func IsTable(typ reflect.Type) bool {
 	return typ.Kind() == reflect.Struct && typ.Field(0).Type == reflect.TypeOf(BaseTable{})
+}
+
+func col(cols ...string) string {
+	for i, col := range cols {
+		cols[i] = fmt.Sprintf(`"%s"`, col)
+	}
+
+	return strings.Join(cols, ".")
 }
 
 type JoinType string
@@ -41,7 +50,7 @@ type Relation struct {
 }
 
 func (r Relation) jsonAgg() string {
-	return fmt.Sprintf("json_agg(%v) %v_json ", r.jsonBuildObject(), r.JsonAggName)
+	return fmt.Sprintf("json_agg(%v) %v ", r.jsonBuildObject(), col(r.JsonAggName+"_json"))
 
 }
 
@@ -49,7 +58,7 @@ func (r Relation) jsonBuildObject() string {
 	result := "json_build_object("
 
 	for _, f := range r.Fields {
-		result += fmt.Sprintf(`'%v', %v.%v,`, f.Json, r.Table, f.Column)
+		result += fmt.Sprintf(`'%v', %v,`, f.Json, col(r.Table, f.Column))
 	}
 
 	for _, o := range r.One {
@@ -57,7 +66,7 @@ func (r Relation) jsonBuildObject() string {
 	}
 
 	for _, m := range r.Many {
-		result += fmt.Sprintf(`'%v', %v_json,`, m.JsonAggName, m.JsonAggName)
+		result += fmt.Sprintf(`'%v', %v,`, m.JsonAggName, col(m.JsonAggName+"_json"))
 	}
 
 	result = result[:len(result)-1]
@@ -72,8 +81,8 @@ func (r Relation) oneJoin() string {
 
 	for _, o := range r.One {
 		// this is reverse from many, theirs FK is ours
-		result += fmt.Sprintf("%v %v on %v.%v = %v.%v",
-			o.JoinType, o.Table, o.from(), o.PK, r.Table, o.FK)
+		result += fmt.Sprintf("%v %v on %v.%v = %v",
+			o.JoinType, col(o.Table), o.from(), col(o.PK), col(r.Table, o.FK))
 
 		result += fmt.Sprintf(" %v %v", o.oneJoin(), o.manyJoin())
 	}
@@ -85,8 +94,8 @@ func (r Relation) manyJoin() string {
 	result := ""
 
 	for _, m := range r.Many {
-		result += fmt.Sprintf(`%v (%v) %v on %v.%v = %v.%v`,
-			m.JoinType, m.Render(), m.Table, m.Table, m.FK, r.Table, r.PK)
+		result += fmt.Sprintf(`%v (%v) %v on %v = %v`,
+			m.JoinType, m.Render(), col(m.Table), col(m.Table, m.FK), col(r.Table, r.PK))
 	}
 
 	return result
@@ -104,9 +113,9 @@ func (r Relation) join() string {
 func (r Relation) from() string {
 	from := ""
 	if r.SubQuery == "" {
-		from = r.Table
+		from = col(r.Table)
 	} else {
-		from = fmt.Sprintf("(%v) %v", r.SubQuery, r.Table)
+		from = fmt.Sprintf("(%v) %v", r.SubQuery, col(r.Table))
 	}
 
 	return from
@@ -116,13 +125,13 @@ func (r Relation) Render() string {
 	result := "select "
 
 	if r.FK != "" {
-		result += fmt.Sprintf("%v.%v, ", r.Table, r.FK)
+		result += fmt.Sprintf("%v, ", col(r.Table, r.FK))
 	}
 
 	result += fmt.Sprintf("%v from %v %v", r.jsonAgg(), r.from(), r.join())
 
 	if r.FK != "" {
-		result += fmt.Sprintf(" group by %v.%v", r.Table, r.FK)
+		result += fmt.Sprintf(" group by %v", col(r.Table, r.FK))
 	}
 
 	return result
