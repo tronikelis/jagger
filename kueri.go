@@ -4,6 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
+	"strings"
+	"unicode"
 
 	"github.com/tronikelis/kueri/relation"
 	"github.com/tronikelis/kueri/tags"
@@ -26,21 +29,72 @@ type QueryBuilder struct {
 	joins  QueryBuilderJoins
 }
 
-func (qb *QueryBuilder) toRelation(target any, seen map[string]bool, args *[]any) *relation.Relation {
+func toIncrementedArgsQuery(query string, by int) (string, error) {
+	QUOTE := '"'
+	COMMA := '\''
+
+	counts := map[rune]int{}
+
+	bySpace := strings.Split(query, " ")
+
+	for i, v := range bySpace {
+		for iChunk, chunk := range v {
+			if chunk == COMMA || chunk == QUOTE {
+				counts[chunk]++
+			}
+
+			// we are only interested in chunks which start with $
+			if iChunk != 0 || chunk != '$' {
+				continue
+			}
+			// we are not inside a ' or a ""
+			if counts[COMMA]%2 != 0 || counts[QUOTE]%2 != 0 {
+				continue
+			}
+			// chunk is too small to be viable
+			if len(v) < 2 {
+				continue
+			}
+			// $<char should be number>
+			if !unicode.IsDigit(rune(v[1])) {
+				continue
+			}
+
+			arg, err := strconv.Atoi(v[1:])
+			if err != nil {
+				return "", err
+			}
+
+			arg += by
+			bySpace[i] = "$" + strconv.Itoa(arg)
+
+			break
+		}
+	}
+
+	return strings.Join(bySpace, " "), nil
+}
+
+func (qb *QueryBuilder) toRelation(target any, seen map[string]bool, args *[]any) (*relation.Relation, error) {
 	t, ok := target.(reflect.Type)
 	if !ok {
 		t = reflect.TypeOf(target)
 	}
 
 	if !relation.IsTable(t) {
-		return nil
+		return nil, errors.New("target not a table")
 	}
 
 	name := tags.NewKueriTag(t.Field(0).Tag.Get("kueri")).Name
 	join, joinExists := qb.joins[name]
 
 	if seen[name] || !joinExists {
-		return nil
+		return nil, nil
+	}
+
+	subQuery, err := toIncrementedArgsQuery(join.subQuery, len(*args))
+	if err != nil {
+		return nil, err
 	}
 
 	*args = append(*args, join.args...)
@@ -71,14 +125,18 @@ func (qb *QueryBuilder) toRelation(target any, seen map[string]bool, args *[]any
 		}
 
 		rel := (*relation.Relation)(nil)
+		err := (error)(nil)
 
 		switch f.Type.Kind() {
 		case reflect.Struct:
-			rel = qb.toRelation(f.Type, seen, args)
+			rel, err = qb.toRelation(f.Type, seen, args)
 		case reflect.Pointer, reflect.Slice:
-			rel = qb.toRelation(f.Type.Elem(), seen, args)
+			rel, err = qb.toRelation(f.Type.Elem(), seen, args)
 		}
 
+		if err != nil {
+			return nil, err
+		}
 		if rel == nil {
 			continue
 		}
@@ -100,7 +158,7 @@ func (qb *QueryBuilder) toRelation(target any, seen map[string]bool, args *[]any
 	}
 
 	rel := relation.Relation{
-		SubQuery: join.subQuery,
+		SubQuery: subQuery,
 		JoinType: join.joinType,
 		PK:       pk,
 		Table:    name,
@@ -109,7 +167,7 @@ func (qb *QueryBuilder) toRelation(target any, seen map[string]bool, args *[]any
 		Many:     many,
 	}
 
-	return &rel
+	return &rel, nil
 }
 
 func (qb *QueryBuilder) ToSql() (string, []any, error) {
@@ -120,9 +178,9 @@ func (qb *QueryBuilder) ToSql() (string, []any, error) {
 		return "", nil, errors.New("ToSql called without target")
 	}
 
-	rel := qb.toRelation(qb.target, seen, &args)
-	if rel == nil {
-		return "", nil, errors.New("unsupported target")
+	rel, err := qb.toRelation(qb.target, seen, &args)
+	if err != nil {
+		return "", nil, err
 	}
 
 	if len(seen) != len(qb.joins) {
