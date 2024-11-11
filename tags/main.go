@@ -2,14 +2,14 @@ package tags
 
 import "strings"
 
-type KueriTag struct {
+type JaggerTag struct {
 	Name string
 	PK   bool
 	FK   string
 }
 
-func NewKueriTag(tag string) KueriTag {
-	dt := KueriTag{}
+func NewJaggerTag(tag string) JaggerTag {
+	dt := JaggerTag{}
 
 	comma := strings.Split(tag, ",")
 	dt.Name = strings.TrimSpace(comma[0])

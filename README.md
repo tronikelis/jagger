@@ -1,10 +1,10 @@
-# kueri
+# jagger
 
 A different way to query data from RDBMS
 
 ```go
 func main() {
-    sql, args, err := kueri.NewQueryBuilder().
+    sql, args, err := jagger.NewQueryBuilder().
         Select(User{}, "").
         LeftJoin(UserSong{}, "select * from user_songs where id = ?", 2).
         ToSql()
@@ -35,7 +35,7 @@ FROM
 
 
 <!--toc:start-->
-- [kueri](#kueri)
+- [jagger](#jagger)
   - [Usage](#usage)
     - [Struct tags](#struct-tags)
     - [Querying](#querying)
@@ -51,23 +51,23 @@ appreciated
 
 ### Struct tags
 
-The query builder supports a struct if it has `kueri.BaseTable` embedded like so
+The query builder supports a struct if it has `jagger.BaseTable` embedded like so
 
 ```go
 type User struct {
-	kueri.BaseTable `kueri:"user"`
+	jagger.BaseTable `jagger:"user"`
 }
 ```
 
-Kueri uses `kueri` as its struct tag, with the structure like this:
-`kueri:"<name>, [k:v, k:v, k:v]`
+jagger uses `jagger` as its struct tag, with the structure like this:
+`jagger:"<name>, [k:v, k:v, k:v]`
 
 `<name>` is an optional name for the table and columns, you don't need to
 specify it on relation fields, e.g.
 
 ```go
 type Song struct {
-	User *User `kueri:", fk:user_id"`
+	User *User `jagger:", fk:user_id"`
 }
 ```
 
@@ -77,11 +77,11 @@ the column on which the foreign key resides
 
 ```go
 type User struct {
-	Songs []Song `kueri:", fk:user_id"`
+	Songs []Song `jagger:", fk:user_id"`
 }
 type Song struct {
-	UserId int `kueri:"user_id"`
-	User *User `kueri:", fk:user_id"`
+	UserId int `jagger:"user_id"`
+	User *User `jagger:", fk:user_id"`
 }
 ```
 
@@ -96,7 +96,7 @@ The methods accept an optional sub query as the second parameter to get the tabl
 
 
 ```go
-sql, args, err := kueri.NewQueryBuilder()
+sql, args, err := jagger.NewQueryBuilder()
 	// [panics if struct is not a table] mandatory, will start to aggregate from this struct
 	Select(User{}, "select * from users order by id desc", arg1, arg2).
 	// [panics if struct is not a table] optional, all joins are available LeftJoin / RightJoin ... etc

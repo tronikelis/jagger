@@ -1,4 +1,4 @@
-package kueri
+package jagger
 
 import (
 	"errors"
@@ -8,8 +8,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/tronikelis/kueri/relation"
-	"github.com/tronikelis/kueri/tags"
+	"github.com/tronikelis/jagger/relation"
+	"github.com/tronikelis/jagger/tags"
 )
 
 type BaseTable = relation.BaseTable
@@ -85,7 +85,7 @@ func (qb *QueryBuilder) toRelation(target any, seen map[string]bool, args *[]any
 		return nil, errors.New("target not a table")
 	}
 
-	name := tags.NewKueriTag(t.Field(0).Tag.Get("kueri")).Name
+	name := tags.NewJaggerTag(t.Field(0).Tag.Get("jagger")).Name
 	join, joinExists := qb.joins[name]
 
 	if seen[name] || !joinExists {
@@ -109,7 +109,7 @@ func (qb *QueryBuilder) toRelation(target any, seen map[string]bool, args *[]any
 	for i := 1; i < t.NumField(); i++ {
 		f := t.Field(i)
 
-		tag := tags.NewKueriTag(f.Tag.Get("kueri"))
+		tag := tags.NewJaggerTag(f.Tag.Get("jagger"))
 		jsonTag := tags.ParseSliceTag(f.Tag.Get("json"))
 
 		if tag.PK {
@@ -196,7 +196,7 @@ func tableName(structure any) (string, error) {
 		return "", errors.New("non table passed to dbTable")
 	}
 
-	return tags.NewKueriTag(t.Field(0).Tag.Get("kueri")).Name, nil
+	return tags.NewJaggerTag(t.Field(0).Tag.Get("jagger")).Name, nil
 }
 
 func NewQueryBuilder() *QueryBuilder {
