@@ -55,9 +55,10 @@ func toIncrementedArgsQuery(query string, by int) (string, error) {
 			if len(v) < 2 {
 				continue
 			}
+
 			// $<char should be number>
 			if !unicode.IsDigit(rune(v[1])) {
-				continue
+				return "", errors.New("found non digit after $")
 			}
 
 			arg, err := strconv.Atoi(v[1:])
