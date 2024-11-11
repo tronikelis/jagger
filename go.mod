@@ -1,4 +1,4 @@
-module github.com/tronikelis/kueri
+module github.com/tronikelis/jagger
 
 go 1.23.2
 

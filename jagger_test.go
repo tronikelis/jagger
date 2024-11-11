@@ -1,39 +1,39 @@
-package kueri_test
+package jagger_test
 
 import (
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/tronikelis/kueri"
+	"github.com/tronikelis/jagger"
 )
 
 type SongTack struct {
-	kueri.BaseTable `kueri:"song_track"`
+	jagger.BaseTable `jagger:"song_track"`
 
-	ID     int       `kueri:"id, pk:" json:"id"`
-	SongId int       `kueri:"song_id" json:"song_id"`
-	Song   *UserSong `kueri:", fk:song_id" json:"song"`
+	ID     int       `jagger:"id, pk:" json:"id"`
+	SongId int       `jagger:"song_id" json:"song_id"`
+	Song   *UserSong `jagger:", fk:song_id" json:"song"`
 }
 
 type UserSong struct {
-	kueri.BaseTable `kueri:"user_song"`
+	jagger.BaseTable `jagger:"user_song"`
 
-	ID     int        `kueri:"id, pk:" json:"id"`
-	UserId int        `kueri:"user_id" json:"user_id"`
-	User   *User      `kueri:", fk:user_id" json:"user"`
-	Tracks []SongTack `kueri:", fk:song_id" json:"tracks"`
+	ID     int        `jagger:"id, pk:" json:"id"`
+	UserId int        `jagger:"user_id" json:"user_id"`
+	User   *User      `jagger:", fk:user_id" json:"user"`
+	Tracks []SongTack `jagger:", fk:song_id" json:"tracks"`
 }
 
 type User struct {
-	kueri.BaseTable `kueri:"user"`
+	jagger.BaseTable `jagger:"user"`
 
-	ID    int        `kueri:"id, pk:" json:"id"`
-	Songs []UserSong `kueri:", fk:user_id" json:"songs"`
+	ID    int        `jagger:"id, pk:" json:"id"`
+	Songs []UserSong `jagger:", fk:user_id" json:"songs"`
 }
 
-func qb() *kueri.QueryBuilder {
-	return kueri.NewQueryBuilder()
+func qb() *jagger.QueryBuilder {
+	return jagger.NewQueryBuilder()
 }
 
 func trim(in string) string {
@@ -155,10 +155,10 @@ func TestCorrectArgOrder(t *testing.T) {
 }
 
 type UserWithSpace struct {
-	kueri.BaseTable `kueri:"user with space"`
+	jagger.BaseTable `jagger:"user with space"`
 
-	ID   int       `kueri:"id with space" json:"id with space"`
-	Song *UserSong `kueri:", fk:song id" json:"song with space"`
+	ID   int       `jagger:"id with space" json:"id with space"`
+	Song *UserSong `jagger:", fk:song id" json:"song with space"`
 }
 
 func TestQuotes(t *testing.T) {
