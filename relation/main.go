@@ -13,11 +13,18 @@ func IsTable(typ reflect.Type) bool {
 }
 
 func col(cols ...string) string {
+	builder := strings.Builder{}
+
 	for i, col := range cols {
-		cols[i] = fmt.Sprintf(`"%s"`, col)
+		val := fmt.Sprintf(`"%s"`, col)
+		if i < len(cols)-1 {
+			val += "."
+		}
+
+		builder.WriteString(val)
 	}
 
-	return strings.Join(cols, ".")
+	return builder.String()
 }
 
 type JoinType string
@@ -55,59 +62,61 @@ func (r Relation) jsonAgg() string {
 }
 
 func (r Relation) jsonBuildObject() string {
-	result := "json_build_object("
+	builder := strings.Builder{}
+	builder.WriteString("json_build_object(")
 
 	for _, f := range r.Fields {
-		result += fmt.Sprintf(`'%v', %v,`, f.Json, col(r.Table, f.Column))
+		builder.WriteString(fmt.Sprintf(`'%v', %v,`, f.Json, col(r.Table, f.Column)))
 	}
 
 	for _, o := range r.One {
-		result += fmt.Sprintf(`'%v', %v,`, o.JsonAggName, o.jsonBuildObject())
+		builder.WriteString(fmt.Sprintf(`'%v', %v,`, o.JsonAggName, o.jsonBuildObject()))
 	}
 
 	for _, m := range r.Many {
-		result += fmt.Sprintf(`'%v', %v,`, m.JsonAggName, col(m.JsonAggName+"_json"))
+		builder.WriteString(fmt.Sprintf(`'%v', %v,`, m.JsonAggName, col(m.JsonAggName+"_json")))
 	}
 
-	result = result[:len(result)-1]
+	result := builder.String()
 
+	result = result[:len(result)-1]
 	result += ")"
 
 	return result
 }
 
 func (r Relation) oneJoin() string {
-	result := ""
+	builder := strings.Builder{}
 
 	for _, o := range r.One {
 		// this is reverse from many, theirs FK is ours
-		result += fmt.Sprintf("%v %v on %v.%v = %v",
-			o.JoinType, col(o.Table), o.from(), col(o.PK), col(r.Table, o.FK))
+		builder.WriteString(fmt.Sprintf("%v %v on %v.%v = %v",
+			o.JoinType, col(o.Table), o.from(), col(o.PK), col(r.Table, o.FK)))
 
-		result += fmt.Sprintf(" %v %v", o.oneJoin(), o.manyJoin())
+		builder.WriteString(fmt.Sprintf(" %v %v", o.oneJoin(), o.manyJoin()))
 	}
 
-	return result
+	return builder.String()
 }
 
 func (r Relation) manyJoin() string {
-	result := ""
+	builder := strings.Builder{}
 
 	for _, m := range r.Many {
-		result += fmt.Sprintf(`%v (%v) %v on %v = %v`,
-			m.JoinType, m.Render(), col(m.Table), col(m.Table, m.FK), col(r.Table, r.PK))
+		builder.WriteString(fmt.Sprintf(`%v (%v) %v on %v = %v`,
+			m.JoinType, m.Render(), col(m.Table), col(m.Table, m.FK), col(r.Table, r.PK)))
 	}
 
-	return result
+	return builder.String()
 }
 
 func (r Relation) join() string {
-	result := ""
+	builder := strings.Builder{}
 
-	result += r.oneJoin()
-	result += r.manyJoin()
+	builder.WriteString(r.oneJoin())
+	builder.WriteString(r.manyJoin())
 
-	return result
+	return builder.String()
 }
 
 func (r Relation) from() string {
@@ -122,17 +131,18 @@ func (r Relation) from() string {
 }
 
 func (r Relation) Render() string {
-	result := "select "
+	builder := strings.Builder{}
+	builder.WriteString("select ")
 
 	if r.FK != "" {
-		result += fmt.Sprintf("%v, ", col(r.Table, r.FK))
+		builder.WriteString(fmt.Sprintf("%v, ", col(r.Table, r.FK)))
 	}
 
-	result += fmt.Sprintf("%v from %v %v", r.jsonAgg(), r.from(), r.join())
+	builder.WriteString(fmt.Sprintf("%v from %v %v", r.jsonAgg(), r.from(), r.join()))
 
 	if r.FK != "" {
-		result += fmt.Sprintf(" group by %v", col(r.Table, r.FK))
+		builder.WriteString(fmt.Sprintf(" group by %v", col(r.Table, r.FK)))
 	}
 
-	return result
+	return builder.String()
 }
