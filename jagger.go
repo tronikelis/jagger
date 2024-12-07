@@ -191,6 +191,16 @@ func (qb *QueryBuilder) ToSql() (string, []any, error) {
 	return rel.Render(), args, nil
 }
 
+// calls .ToSql and panics if error
+func (qb *QueryBuilder) MustSql() (string, []any) {
+	sql, args, err := qb.ToSql()
+	if err != nil {
+		panic(err)
+	}
+
+	return sql, args
+}
+
 func tableName(structure any) (string, error) {
 	t := reflect.TypeOf(structure)
 	if !relation.IsTable(t) {

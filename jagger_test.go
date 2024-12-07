@@ -202,3 +202,9 @@ func TestIncrementsArgumentsDoubleDollar(t *testing.T) {
 
 	assert.NotNil(t, err)
 }
+
+func TestMustSql(t *testing.T) {
+	assert.Panics(t, func() {
+		qb().MustSql()
+	})
+}
