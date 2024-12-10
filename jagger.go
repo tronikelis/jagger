@@ -30,50 +30,53 @@ type QueryBuilder struct {
 }
 
 func toIncrementedArgsQuery(query string, by int) (string, error) {
-	QUOTE := '"'
-	COMMA := '\''
+	counts := struct {
+		quote  int
+		quotes int
+	}{}
+	runes := []rune(query)
 
-	counts := map[rune]int{}
+	builder := strings.Builder{}
+	acc := strings.Builder{}
 
-	bySpace := strings.Split(query, " ")
+	for i := 0; i < len(runes); i++ {
+		builder.WriteRune(runes[i])
 
-	for i, v := range bySpace {
-		for iChunk, chunk := range v {
-			if chunk == COMMA || chunk == QUOTE {
-				counts[chunk]++
+		if runes[i] == '$' && counts.quote%2 == 0 && counts.quotes%2 == 0 {
+			acc.WriteString(builder.String())
+			builder.Reset()
+
+			for i+1 < len(runes) && unicode.IsDigit(runes[i+1]) {
+				i++
+				builder.WriteRune(runes[i])
 			}
-
-			// we are only interested in chunks which start with $
-			if iChunk != 0 || chunk != '$' {
+			if builder.Len() == 0 {
 				continue
 			}
-			// we are not inside a ' or a ""
-			if counts[COMMA]%2 != 0 || counts[QUOTE]%2 != 0 {
-				continue
-			}
-			// chunk is too small to be viable
-			if len(v) < 2 {
-				continue
-			}
 
-			// $<char should be number>
-			if !unicode.IsDigit(rune(v[1])) {
-				return "", errors.New("found non digit after $")
-			}
-
-			arg, err := strconv.Atoi(v[1:])
+			num, err := strconv.Atoi(builder.String())
 			if err != nil {
 				return "", err
 			}
+			builder.Reset()
 
-			arg += by
-			bySpace[i] = "$" + strconv.Itoa(arg)
+			num += by
 
-			break
+			acc.WriteString(strconv.Itoa(num))
+			continue
+		}
+
+		switch runes[i] {
+		case '"':
+			counts.quotes++
+		case '\'':
+			counts.quote++
 		}
 	}
 
-	return strings.Join(bySpace, " "), nil
+	acc.WriteString(builder.String())
+
+	return acc.String(), nil
 }
 
 func (qb *QueryBuilder) toRelation(target any, seen map[string]bool, args *[]any) (*relation.Relation, error) {

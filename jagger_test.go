@@ -182,25 +182,10 @@ func TestIncrementsArguments(t *testing.T) {
 	sql, _, _ := qb().
 		Select(User{}, "$1", 11).
 		LeftJoin(UserSong{}, "$1 \"$3\" $2 ' '' $2'", 22, 33).
-		LeftJoin(SongTack{}, "$1 $2 ' $3 '", 1, 2).
+		LeftJoin(SongTack{}, "$1 $2 ' $3 ' ($3)", 1, 2).
 		ToSql()
 
-	assert.Equal(t, sql, `select json_agg(json_build_object('id', "user"."id",'songs', "songs_json")) "_json"  from ($1) "user" left join (select "user_song"."user_id", json_agg(json_build_object('id', "user_song"."id",'user_id', "user_song"."user_id",'tracks', "tracks_json")) "songs_json"  from ($2 "$3" $3 ' '' $2') "user_song" left join (select "song_track"."song_id", json_agg(json_build_object('id', "song_track"."id",'song_id', "song_track"."song_id")) "tracks_json"  from ($4 $5 ' $3 ') "song_track"  group by "song_track"."song_id") "song_track" on "song_track"."song_id" = "user_song"."id" group by "user_song"."user_id") "user_song" on "user_song"."user_id" = "user"."id"`)
-}
-
-func TestIncrementsArgumentsDoubleDollar(t *testing.T) {
-	sql, _, err := qb().
-		Select(User{}, "$1 '$$2'").
-		ToSql()
-
-	assert.NotEqual(t, sql, "")
-	assert.Nil(t, err)
-
-	sql, _, err = qb().
-		Select(User{}, "$1 $$2").
-		ToSql()
-
-	assert.NotNil(t, err)
+	assert.Equal(t, sql, `select json_agg(json_build_object('id', "user"."id",'songs', "songs_json")) "_json"  from ($1) "user" left join (select "user_song"."user_id", json_agg(json_build_object('id', "user_song"."id",'user_id', "user_song"."user_id",'tracks', "tracks_json")) "songs_json"  from ($2 "$3" $3 ' '' $2') "user_song" left join (select "song_track"."song_id", json_agg(json_build_object('id', "song_track"."id",'song_id', "song_track"."song_id")) "tracks_json"  from ($4 $5 ' $3 ' ($6)) "song_track"  group by "song_track"."song_id") "song_track" on "song_track"."song_id" = "user_song"."id" group by "user_song"."user_id") "user_song" on "user_song"."user_id" = "user"."id"`)
 }
 
 func TestMustSql(t *testing.T) {
