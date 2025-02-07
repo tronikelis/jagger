@@ -44,9 +44,10 @@ type Field struct {
 type Relation struct {
 	Table string
 
-	FK          string
-	PK          string
-	JsonAggName string
+	FK            string
+	PK            string
+	JsonAggName   string
+	JsonAggParams string
 
 	JoinType JoinType
 	SubQuery string
@@ -57,8 +58,16 @@ type Relation struct {
 }
 
 func (r Relation) jsonAgg() string {
-	return fmt.Sprintf("json_agg(%v) %v ", r.jsonBuildObject(), col(r.JsonAggName+"_json"))
+	builder := strings.Builder{}
 
+	builder.WriteString(fmt.Sprintf("json_agg(%v", r.jsonBuildObject()))
+	if r.JsonAggParams != "" {
+		builder.WriteString(fmt.Sprintf(" %v", r.JsonAggParams))
+	}
+
+	builder.WriteString(fmt.Sprintf(") %v", col(r.JsonAggName+"_json")))
+
+	return builder.String()
 }
 
 func (r Relation) jsonBuildObject() string {

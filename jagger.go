@@ -12,13 +12,16 @@ import (
 	"github.com/tronikelis/jagger/tags"
 )
 
-type BaseTable = relation.BaseTable
-type JoinType = relation.JoinType
+type (
+	BaseTable = relation.BaseTable
+	JoinType  = relation.JoinType
+)
 
 type QueryBuilderJoin struct {
-	joinType JoinType
-	subQuery string
-	args     []any
+	joinType      JoinType
+	subQuery      string
+	jsonAggParams string
+	args          []any
 }
 
 type QueryBuilderJoins map[string]QueryBuilderJoin
@@ -162,13 +165,14 @@ func (qb *QueryBuilder) toRelation(target any, seen map[string]bool, args *[]any
 	}
 
 	rel := relation.Relation{
-		SubQuery: subQuery,
-		JoinType: join.joinType,
-		PK:       pk,
-		Table:    name,
-		Fields:   fields,
-		One:      one,
-		Many:     many,
+		SubQuery:      subQuery,
+		JoinType:      join.joinType,
+		PK:            pk,
+		Table:         name,
+		Fields:        fields,
+		One:           one,
+		Many:          many,
+		JsonAggParams: join.jsonAggParams,
 	}
 
 	return &rel, nil
@@ -218,46 +222,47 @@ func NewQueryBuilder() *QueryBuilder {
 }
 
 // panics if table arg is not table-like
-func (qb *QueryBuilder) Select(table any, subQuery string, args ...any) *QueryBuilder {
+func (qb *QueryBuilder) Select(table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
 	qb.target = table
-	qb.Join("", table, subQuery, args...)
+	qb.Join("", table, jsonAggParams, subQuery, args...)
 	return qb
 }
 
 // panics if table is not table-like
-func (qb *QueryBuilder) Join(joinType JoinType, table any, subQuery string, args ...any) *QueryBuilder {
+func (qb *QueryBuilder) Join(joinType JoinType, table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
 	name, err := tableName(table)
 	if err != nil {
 		panic(err)
 	}
 
 	qb.joins[name] = QueryBuilderJoin{
-		joinType: joinType,
-		subQuery: subQuery,
-		args:     args,
+		joinType:      joinType,
+		subQuery:      subQuery,
+		args:          args,
+		jsonAggParams: jsonAggParams,
 	}
 
 	return qb
 }
 
 // panics if table arg is not table-like
-func (qb *QueryBuilder) LeftJoin(table any, subQuery string, args ...any) *QueryBuilder {
-	return qb.Join(relation.LEFT_JOIN, table, subQuery, args...)
+func (qb *QueryBuilder) LeftJoin(table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
+	return qb.Join(relation.LEFT_JOIN, table, jsonAggParams, subQuery, args...)
 }
 
 // panics if table arg is not table-like
-func (qb *QueryBuilder) RightJoin(table any, subQuery string, args ...any) *QueryBuilder {
-	return qb.Join(relation.RIGHT_JOIN, table, subQuery, args...)
+func (qb *QueryBuilder) RightJoin(table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
+	return qb.Join(relation.RIGHT_JOIN, table, jsonAggParams, subQuery, args...)
 }
 
 // panics if table arg is not table-like
-func (qb *QueryBuilder) InnerJoin(table any, subQuery string, args ...any) *QueryBuilder {
-	return qb.Join(relation.INNER_JOIN, table, subQuery, args...)
+func (qb *QueryBuilder) InnerJoin(table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
+	return qb.Join(relation.INNER_JOIN, table, jsonAggParams, subQuery, args...)
 }
 
 // panics if table arg is not table-like
-func (qb *QueryBuilder) FullOuterJoin(table any, subQuery string, args ...any) *QueryBuilder {
-	return qb.Join(relation.FULL_OUTER_JOIN, table, subQuery, args...)
+func (qb *QueryBuilder) FullOuterJoin(table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
+	return qb.Join(relation.FULL_OUTER_JOIN, table, jsonAggParams, subQuery, args...)
 }
 
 func (qb *QueryBuilder) Clone() *QueryBuilder {
