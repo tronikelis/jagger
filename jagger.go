@@ -165,14 +165,14 @@ func (qb *QueryBuilder) toRelation(target any, seen map[string]bool, args *[]any
 	}
 
 	rel := relation.Relation{
-		SubQuery:    subQuery,
-		JoinType:    join.joinType,
-		PK:          pk,
-		Table:       name,
-		Fields:      fields,
-		One:         one,
-		Many:        many,
-		JsonAggName: join.jsonAggParams,
+		SubQuery:      subQuery,
+		JoinType:      join.joinType,
+		PK:            pk,
+		Table:         name,
+		Fields:        fields,
+		One:           one,
+		Many:          many,
+		JsonAggParams: join.jsonAggParams,
 	}
 
 	return &rel, nil

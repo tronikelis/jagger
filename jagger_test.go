@@ -193,3 +193,11 @@ func TestMustSql(t *testing.T) {
 		qb().MustSql()
 	})
 }
+
+func TestJsonAggParams(t *testing.T) {
+	sql, _, _ := qb().
+		Select(User{}, "order by id", "").
+		ToSql()
+
+	assert.Equal(t, `select json_agg(json_build_object('id', "user"."id") order by id) "_json" from "user"`, trim(sql))
+}

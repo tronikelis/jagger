@@ -62,12 +62,10 @@ func (r Relation) jsonAgg() string {
 
 	builder.WriteString(fmt.Sprintf("json_agg(%v", r.jsonBuildObject()))
 	if r.JsonAggParams != "" {
-		builder.WriteString(fmt.Sprintf(" %v)", r.JsonAggParams))
-	} else {
-		builder.WriteString(")")
+		builder.WriteString(fmt.Sprintf(" %v", r.JsonAggParams))
 	}
 
-	builder.WriteString(fmt.Sprintf(" %v", col(r.JsonAggName+"_json")))
+	builder.WriteString(fmt.Sprintf(") %v", col(r.JsonAggName+"_json")))
 
 	return builder.String()
 }
