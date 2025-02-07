@@ -58,7 +58,18 @@ type Relation struct {
 }
 
 func (r Relation) jsonAgg() string {
-	return fmt.Sprintf("json_agg(%v) %v %v", r.jsonBuildObject(), col(r.JsonAggName+"_json"), r.JsonAggParams)
+	builder := strings.Builder{}
+
+	builder.WriteString(fmt.Sprintf("json_agg(%v", r.jsonBuildObject()))
+	if r.JsonAggParams != "" {
+		builder.WriteString(fmt.Sprintf(" %v)", r.JsonAggParams))
+	} else {
+		builder.WriteString(")")
+	}
+
+	builder.WriteString(fmt.Sprintf(" %v", col(r.JsonAggName+"_json")))
+
+	return builder.String()
 }
 
 func (r Relation) jsonBuildObject() string {
