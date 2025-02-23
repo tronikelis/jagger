@@ -221,8 +221,19 @@ func NewQueryBuilder() *QueryBuilder {
 	return &QueryBuilder{joins: QueryBuilderJoins{}}
 }
 
+func maybeDeref(v any) any {
+	val := reflect.ValueOf(v)
+	if val.Kind() == reflect.Pointer {
+		return val.Elem().Interface()
+	}
+
+	return v
+}
+
 // panics if table arg is not table-like
 func (qb *QueryBuilder) Select(table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
+	table = maybeDeref(table)
+
 	qb.target = table
 	qb.Join("", table, jsonAggParams, subQuery, args...)
 	return qb
@@ -230,6 +241,8 @@ func (qb *QueryBuilder) Select(table any, jsonAggParams string, subQuery string,
 
 // panics if table is not table-like
 func (qb *QueryBuilder) Join(joinType JoinType, table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
+	table = maybeDeref(table)
+
 	name, err := tableName(table)
 	if err != nil {
 		panic(err)

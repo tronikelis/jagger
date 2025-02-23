@@ -201,3 +201,12 @@ func TestJsonAggParams(t *testing.T) {
 
 	assert.Equal(t, `select json_agg(json_build_object('id', "user"."id") order by id) "_json" from "user"`, trim(sql))
 }
+
+func TestPassPointerTable(t *testing.T) {
+	sql, _ := qb().
+		Select(&User{}, "", "").
+		LeftJoin(&UserSong{}, "", "").
+		MustSql()
+
+	assert.NotEmpty(t, sql)
+}
