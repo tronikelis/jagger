@@ -192,7 +192,7 @@ func (qb *QueryBuilder) ToSql() (string, []any, error) {
 	}
 
 	if len(seen) != len(qb.joins) {
-		return "", nil, errors.New(fmt.Sprintf("didn't use all joins (%v/%v)", len(seen), len(qb.joins)))
+		return "", nil, errors.New(fmt.Sprintf("didn't use all joins (%d/%d)", len(seen), len(qb.joins)))
 	}
 
 	return rel.Render(), args, nil
