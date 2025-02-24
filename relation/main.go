@@ -99,8 +99,8 @@ func (r Relation) oneJoin() string {
 
 	for _, o := range r.One {
 		// this is reverse from many, theirs FK is ours
-		builder.WriteString(fmt.Sprintf("%v %v on %v.%v = %v",
-			o.JoinType, col(o.Table), o.from(), col(o.PK), col(r.Table, o.FK)))
+		builder.WriteString(fmt.Sprintf("%v %v on %v = %v",
+			o.JoinType, o.from(), col(o.Table, o.PK), col(r.Table, o.FK)))
 
 		builder.WriteString(fmt.Sprintf(" %v %v", o.oneJoin(), o.manyJoin()))
 	}
