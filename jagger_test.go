@@ -89,6 +89,17 @@ func TestManyToOne(t *testing.T) {
 	assert.Equal(t, err, nil)
 }
 
+func TestManyToOneSubQuery(t *testing.T) {
+	sql, args, err := qb().
+		Select(UserSong{}, "", "").
+		LeftJoin(User{}, "", "select * from users").
+		ToSql()
+
+	assert.Equal(t, trim(sql), `select json_agg(json_build_object('id', "user_song"."id",'user_id', "user_song"."user_id",'user', json_build_object('id', "user"."id"))) "_json" from "user_song" left join (select * from users) "user" on "user"."id" = "user_song"."user_id"`)
+	assert.Equal(t, args, []any{})
+	assert.Equal(t, err, nil)
+}
+
 func TestSkipCyclic(t *testing.T) {
 	sql, args, err := qb().
 		Select(User{}, "", "").
