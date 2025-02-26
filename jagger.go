@@ -3,6 +3,7 @@ package jagger
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"reflect"
 	"strconv"
 	"strings"
@@ -17,19 +18,21 @@ type (
 	JoinType  = relation.JoinType
 )
 
-type QueryBuilderJoin struct {
+type joinParams struct {
 	joinType      JoinType
 	subQuery      string
 	jsonAggParams string
 	args          []any
 }
 
-type QueryBuilderJoins map[string]QueryBuilderJoin
-
 type QueryBuilder struct {
 	// the target struct
-	target any
-	joins  QueryBuilderJoins
+	target        any
+	subQuery      string
+	jsonAggParams string
+	args          []any
+
+	joins map[string]joinParams
 }
 
 func toIncrementedArgsQuery(query string, by int) (string, error) {
@@ -218,37 +221,26 @@ func tableName(structure any) (string, error) {
 }
 
 func NewQueryBuilder() *QueryBuilder {
-	return &QueryBuilder{joins: QueryBuilderJoins{}}
-}
-
-func maybeDeref(v any) any {
-	val := reflect.ValueOf(v)
-	if val.Kind() == reflect.Pointer {
-		return val.Elem().Interface()
-	}
-
-	return v
+	return &QueryBuilder{joins: map[string]joinParams{}}
 }
 
 // panics if table arg is not table-like
 func (qb *QueryBuilder) Select(table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
-	table = maybeDeref(table)
+	val := reflect.ValueOf(table)
+	if val.Kind() == reflect.Pointer {
+		table = val.Elem().Interface()
+	}
 
 	qb.target = table
-	qb.Join("", table, jsonAggParams, subQuery, args...)
+	qb.jsonAggParams = jsonAggParams
+	qb.subQuery = subQuery
+	qb.args = args
+
 	return qb
 }
 
-// panics if table is not table-like
-func (qb *QueryBuilder) Join(joinType JoinType, table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
-	table = maybeDeref(table)
-
-	name, err := tableName(table)
-	if err != nil {
-		panic(err)
-	}
-
-	qb.joins[name] = QueryBuilderJoin{
+func (qb *QueryBuilder) Join(joinType JoinType, path string, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
+	qb.joins[path] = joinParams{
 		joinType:      joinType,
 		subQuery:      subQuery,
 		args:          args,
@@ -259,23 +251,23 @@ func (qb *QueryBuilder) Join(joinType JoinType, table any, jsonAggParams string,
 }
 
 // panics if table arg is not table-like
-func (qb *QueryBuilder) LeftJoin(table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
-	return qb.Join(relation.LEFT_JOIN, table, jsonAggParams, subQuery, args...)
+func (qb *QueryBuilder) LeftJoin(path string, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
+	return qb.Join(relation.LEFT_JOIN, path, jsonAggParams, subQuery, args...)
 }
 
 // panics if table arg is not table-like
-func (qb *QueryBuilder) RightJoin(table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
-	return qb.Join(relation.RIGHT_JOIN, table, jsonAggParams, subQuery, args...)
+func (qb *QueryBuilder) RightJoin(path string, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
+	return qb.Join(relation.RIGHT_JOIN, path, jsonAggParams, subQuery, args...)
 }
 
 // panics if table arg is not table-like
-func (qb *QueryBuilder) InnerJoin(table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
-	return qb.Join(relation.INNER_JOIN, table, jsonAggParams, subQuery, args...)
+func (qb *QueryBuilder) InnerJoin(path string, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
+	return qb.Join(relation.INNER_JOIN, path, jsonAggParams, subQuery, args...)
 }
 
 // panics if table arg is not table-like
-func (qb *QueryBuilder) FullOuterJoin(table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
-	return qb.Join(relation.FULL_OUTER_JOIN, table, jsonAggParams, subQuery, args...)
+func (qb *QueryBuilder) FullOuterJoin(path string, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
+	return qb.Join(relation.FULL_OUTER_JOIN, path, jsonAggParams, subQuery, args...)
 }
 
 func (qb *QueryBuilder) Clone() *QueryBuilder {
@@ -285,9 +277,7 @@ func (qb *QueryBuilder) Clone() *QueryBuilder {
 	// the caller could still change for example
 	// the arguments, but this is fine
 	copied.target = qb.target
-	for k, v := range qb.joins {
-		copied.joins[k] = v
-	}
+	maps.Copy(copied.joins, qb.joins)
 
 	return copied
 }
