@@ -141,7 +141,7 @@ func (r Relation) from() string {
 	if r.SubQuery == "" {
 		from = fmt.Sprintf("%s as %s", col(r.Table), col(r.name()))
 	} else {
-		from = fmt.Sprintf("(%s) %s as %s", r.SubQuery, col(r.Table), col(r.name()))
+		from = fmt.Sprintf("(%s) %s", r.SubQuery, col(r.name()))
 	}
 
 	return from

@@ -61,7 +61,7 @@ func TestSimpleQuery(t *testing.T) {
 func TestOneToMany(t *testing.T) {
 	sql, args, err := qb().
 		Select(User{}, "", "").
-		LeftJoin(UserSong{}, "", "").
+		LeftJoin("Songs", "", "").
 		ToSql()
 
 	assert.Equal(t, trim(sql), `select json_agg(json_build_object('id', "user"."id",'songs', "songs_json")) "_json" from "user" left join (select "user_song"."user_id", json_agg(json_build_object('id', "user_song"."id",'user_id', "user_song"."user_id")) "songs_json" from "user_song"  group by "user_song"."user_id") "user_song" on "user_song"."user_id" = "user"."id"`)
@@ -70,7 +70,7 @@ func TestOneToMany(t *testing.T) {
 
 	sql, args, err = qb().
 		Select(User{}, "", "").
-		LeftJoin(UserSong{}, "", "song sub").
+		LeftJoin("Songs", "", "song sub").
 		ToSql()
 
 	assert.Equal(t, trim(sql), `select json_agg(json_build_object('id', "user"."id",'songs', "songs_json")) "_json" from "user" left join (select "user_song"."user_id", json_agg(json_build_object('id', "user_song"."id",'user_id', "user_song"."user_id")) "songs_json" from (song sub) "user_song"  group by "user_song"."user_id") "user_song" on "user_song"."user_id" = "user"."id"`)
@@ -81,7 +81,7 @@ func TestOneToMany(t *testing.T) {
 func TestManyToOne(t *testing.T) {
 	sql, args, err := qb().
 		Select(UserSong{}, "", "").
-		LeftJoin(User{}, "", "").
+		LeftJoin("User", "", "").
 		ToSql()
 
 	assert.Equal(t, trim(sql), `select json_agg(json_build_object('id', "user_song"."id",'user_id', "user_song"."user_id",'user', json_build_object('id', "user"."id"))) "_json" from "user_song" left join "user" on "user"."id" = "user_song"."user_id"`)
@@ -92,7 +92,7 @@ func TestManyToOne(t *testing.T) {
 func TestManyToOneSubQuery(t *testing.T) {
 	sql, args, err := qb().
 		Select(UserSong{}, "", "").
-		LeftJoin(User{}, "", "select * from users").
+		LeftJoin("User", "", "select * from users").
 		ToSql()
 
 	assert.Equal(t, trim(sql), `select json_agg(json_build_object('id', "user_song"."id",'user_id', "user_song"."user_id",'user', json_build_object('id', "user"."id"))) "_json" from "user_song" left join (select * from users) "user" on "user"."id" = "user_song"."user_id"`)
@@ -100,41 +100,23 @@ func TestManyToOneSubQuery(t *testing.T) {
 	assert.Equal(t, err, nil)
 }
 
-func TestSkipCyclic(t *testing.T) {
+func TestMultipleRelations(t *testing.T) {
 	sql, args, err := qb().
 		Select(User{}, "", "").
-		LeftJoin(UserSong{}, "", "").
-		LeftJoin(User{}, "", "").
+		LeftJoin("Songs.User", "", "").
+		LeftJoin("Songs.Tracks", "", "").
 		ToSql()
 
-	assert.Equal(t, trim(sql), `select json_agg(json_build_object('id', "user"."id",'songs', "songs_json")) "_json" from "user" left join (select "user_song"."user_id", json_agg(json_build_object('id', "user_song"."id",'user_id', "user_song"."user_id")) "songs_json" from "user_song"  group by "user_song"."user_id") "user_song" on "user_song"."user_id" = "user"."id"`)
-	assert.Equal(t, args, []any{})
-	assert.Equal(t, err, nil)
-}
-
-func TestOrderDoesNotMatter(t *testing.T) {
-	sql, args, err := qb().
-		LeftJoin(SongTack{}, "", "").
-		Select(User{}, "", "").
-		LeftJoin(UserSong{}, "", "").
-		ToSql()
-
-	sql2, args2, err2 := qb().
-		Select(User{}, "", "").
-		LeftJoin(SongTack{}, "", "").
-		LeftJoin(UserSong{}, "", "").
-		ToSql()
-
-	assert.Equal(t, sql, sql2)
-	assert.Equal(t, args, args2)
-	assert.Equal(t, err, err2)
+	assert.NoError(t, err)
+	assert.Equal(t, []any{}, args)
+	assert.Equal(t, "", sql)
 }
 
 func TestBoth(t *testing.T) {
 	sql, args, err := qb().
 		Select(User{}, "", "").
-		LeftJoin(UserSong{}, "", "").
-		LeftJoin(SongTack{}, "", "").
+		LeftJoin("Songs", "", "").
+		LeftJoin("Songs.Tracks", "", "").
 		ToSql()
 
 	assert.Equal(t, trim(sql), `select json_agg(json_build_object('id', "user"."id",'songs', "songs_json")) "_json" from "user" left join (select "user_song"."user_id", json_agg(json_build_object('id', "user_song"."id",'user_id', "user_song"."user_id",'tracks', "tracks_json")) "songs_json" from "user_song" left join (select "song_track"."song_id", json_agg(json_build_object('id', "song_track"."id",'song_id', "song_track"."song_id")) "tracks_json" from "song_track"  group by "song_track"."song_id") "song_track" on "song_track"."song_id" = "user_song"."id" group by "user_song"."user_id") "user_song" on "user_song"."user_id" = "user"."id"`)
@@ -155,14 +137,16 @@ func TestPanicsOnInvalidSelect(t *testing.T) {
 }
 
 func TestJoinsMustBeValid(t *testing.T) {
-	_, _, err := qb().Select(User{}, "", "").LeftJoin(SongTack{}, "", "").ToSql()
+	_, _, err := qb().Select(User{}, "", "").LeftJoin("foo", "", "").ToSql()
 	assert.Error(t, err)
 }
 
 func TestCorrectArgOrder(t *testing.T) {
-	_, args, _ := qb().Select(User{}, "", "", 1, 2).LeftJoin(SongTack{}, "", "", 3, 4).LeftJoin(UserSong{}, "", "", 5, 6).ToSql()
+	sql, args, err := qb().Select(User{}, "", "", 1, 2).LeftJoin("Songs.Tracks", "", "select * from tracks", 3, 4).LeftJoin("Songs", "", "select * from songs", 5, 6).ToSql()
+	assert.Equal(t, "", sql)
+	assert.NoError(t, err)
 	// user -> user song -> song track
-	assert.Equal(t, args, []any{1, 2, 5, 6, 3, 4})
+	assert.Equal(t, []any{1, 2, 5, 6, 3, 4}, args)
 }
 
 type UserWithSpace struct {
@@ -173,7 +157,7 @@ type UserWithSpace struct {
 }
 
 func TestQuotes(t *testing.T) {
-	sql, _, _ := qb().Select(UserWithSpace{}, "", "").LeftJoin(UserSong{}, "", "").ToSql()
+	sql, _, _ := qb().Select(UserWithSpace{}, "", "").LeftJoin("Song", "", "").ToSql()
 
 	assert.Equal(t, trim(sql), `select json_agg(json_build_object('id with space', "user with space"."id with space",'song with space', json_build_object('id', "user_song"."id",'user_id', "user_song"."user_id"))) "_json" from "user with space" left join "user_song" on "user_song"."id" = "user with space"."song id"`)
 }
@@ -182,7 +166,7 @@ func TestClone(t *testing.T) {
 	q := qb()
 	qClone := q.Clone()
 
-	qClone.Select(User{}, "", "").LeftJoin(UserSong{}, "", "")
+	qClone.Select(User{}, "", "").LeftJoin("Songs", "", "")
 
 	// q does not have a select statement
 	_, _, err := q.ToSql()
@@ -192,8 +176,8 @@ func TestClone(t *testing.T) {
 func TestIncrementsArguments(t *testing.T) {
 	sql, _, _ := qb().
 		Select(User{}, "", "$1", 11).
-		LeftJoin(UserSong{}, "", "$1 \"$3\" $2 ' '' $2'", 22, 33).
-		LeftJoin(SongTack{}, "", "$1 $2 ' $3 ' ($3)", 1, 2).
+		LeftJoin("Songs", "", "$1 \"$3\" $2 ' '' $2'", 22, 33).
+		LeftJoin("Songs.Track", "", "$1 $2 ' $3 ' ($3)", 1, 2).
 		ToSql()
 
 	assert.Equal(t, sql, `select json_agg(json_build_object('id', "user"."id",'songs', "songs_json")) "_json" from ($1) "user" left join (select "user_song"."user_id", json_agg(json_build_object('id', "user_song"."id",'user_id', "user_song"."user_id",'tracks', "tracks_json")) "songs_json" from ($2 "$3" $3 ' '' $2') "user_song" left join (select "song_track"."song_id", json_agg(json_build_object('id', "song_track"."id",'song_id', "song_track"."song_id")) "tracks_json" from ($4 $5 ' $3 ' ($6)) "song_track"  group by "song_track"."song_id") "song_track" on "song_track"."song_id" = "user_song"."id" group by "user_song"."user_id") "user_song" on "user_song"."user_id" = "user"."id"`)
@@ -216,7 +200,7 @@ func TestJsonAggParams(t *testing.T) {
 func TestPassPointerTable(t *testing.T) {
 	sql, _ := qb().
 		Select(&User{}, "", "").
-		LeftJoin(&UserSong{}, "", "").
+		LeftJoin("Songs", "", "").
 		MustSql()
 
 	assert.NotEmpty(t, sql)
