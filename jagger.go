@@ -238,11 +238,6 @@ func NewQueryBuilder() *QueryBuilder {
 }
 
 func (qb *QueryBuilder) Select(table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
-	val := reflect.ValueOf(table)
-	if val.Kind() == reflect.Pointer {
-		table = val.Elem().Interface()
-	}
-
 	qb.target = table
 	qb.params = joinParams{
 		jsonAggParams: jsonAggParams,
