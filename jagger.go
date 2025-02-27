@@ -30,30 +30,28 @@ type joinTree struct {
 	children []joinTree
 }
 
-func upsertJoinTree(current joinTree, params joinParams, fields []string, index int) joinTree {
-	if index == len(fields) {
-		return current
-	}
-
+func upsertJoinTree(current []joinTree, params joinParams, fields []string, index int) []joinTree {
 	field := fields[index]
 
-	j := joinTree{field: field}
-	if index == len(fields)-1 {
-		j.params = params
-	}
+	for i, child := range current {
+		if child.field == field {
+			if index == len(fields)-1 {
+				current[i].params = params
+				return current
+			}
 
-	for i, child := range current.children {
-		if field == child.field {
-			current.children[i] = upsertJoinTree(child, params, fields, index+1)
+			current[i].children = upsertJoinTree(child.children, params, fields, index+1)
 			return current
 		}
 	}
 
+	j := joinTree{field: field}
 	if j.params.joinType == "" {
 		j.params.joinType = params.joinType
 	}
 
-	current.children = append(current.children, upsertJoinTree(j, params, fields, index+1))
+	current = append(current, upsertJoinTree([]joinTree{j}, params, fields, index)...)
+
 	return current
 }
 
@@ -62,10 +60,8 @@ func newJoinTree(rootParams joinParams, joins map[string]joinParams) joinTree {
 
 	for k, v := range joins {
 		fields := strings.Split(k, ".")
-		joinTree = upsertJoinTree(joinTree, v, fields, 0)
+		joinTree.children = upsertJoinTree(joinTree.children, v, fields, 0)
 	}
-
-	fmt.Printf("%#+v\n", joinTree)
 
 	return joinTree
 }
@@ -223,8 +219,6 @@ func (qb *QueryBuilder) ToSql() (string, []any, error) {
 	if err != nil {
 		return "", nil, err
 	}
-
-	fmt.Printf("cmon: %#+v\n", args)
 
 	return rel.Render(), args, nil
 }
