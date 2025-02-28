@@ -88,7 +88,9 @@ func (r Relation) jsonAgg() string {
 
 func (r Relation) jsonBuildObject() string {
 	builder := strings.Builder{}
-	builder.WriteString("json_build_object(")
+	builder.WriteString(fmt.Sprintf(
+		"case when %s is null then null else json_strip_nulls(json_build_object(", col(r.name(), r.PK),
+	))
 
 	for _, f := range r.Fields {
 		builder.WriteString(fmt.Sprintf(`'%s', %s,`, f.Json, col(r.name(), f.Column)))
@@ -105,7 +107,7 @@ func (r Relation) jsonBuildObject() string {
 	result := builder.String()
 
 	result = result[:len(result)-1]
-	result += ")"
+	result += ")) end"
 
 	return result
 }
