@@ -1,8 +1,8 @@
 package jagger
 
 import (
-	"errors"
 	"fmt"
+	"maps"
 	"reflect"
 	"strconv"
 	"strings"
@@ -17,19 +17,145 @@ type (
 	JoinType  = relation.JoinType
 )
 
-type QueryBuilderJoin struct {
+type joinParams struct {
 	joinType      JoinType
 	subQuery      string
 	jsonAggParams string
 	args          []any
 }
 
-type QueryBuilderJoins map[string]QueryBuilderJoin
+type joinTree struct {
+	field    string
+	params   joinParams
+	children []*joinTree
+}
+
+func upsertJoinTree(current *joinTree, params joinParams, fields []string) {
+	for i, field := range fields {
+		found := false
+
+		for _, child := range current.children {
+			if child.field == field {
+				current = child
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			j := &joinTree{field: field}
+			j.params.joinType = params.joinType
+			current.children = append(current.children, j)
+			current = j
+		}
+
+		if i == len(fields)-1 {
+			current.params = params
+		}
+	}
+}
+
+func newJoinTree(rootParams joinParams, joins map[string]joinParams) *joinTree {
+	joinTree := &joinTree{params: rootParams}
+
+	for k, v := range joins {
+		fields := strings.Split(k, ".")
+		upsertJoinTree(joinTree, v, fields)
+	}
+
+	return joinTree
+}
 
 type QueryBuilder struct {
 	// the target struct
 	target any
-	joins  QueryBuilderJoins
+	params joinParams
+
+	joins map[string]joinParams
+}
+
+func toRelation(typ reflect.Type, joinTree *joinTree, args *[]any) (relation.Relation, error) {
+	if typ.Kind() == reflect.Pointer || typ.Kind() == reflect.Slice {
+		typ = typ.Elem()
+	}
+
+	if !relation.IsTable(typ) {
+		return relation.Relation{}, fmt.Errorf("Passed type not a table")
+	}
+
+	rel := relation.Relation{}
+	rel.JoinType = joinTree.params.joinType
+	rel.JsonAggParams = joinTree.params.jsonAggParams
+
+	jaggerTag := tags.NewJaggerTag(typ.Field(0).Tag.Get("jagger"))
+	rel.Table = jaggerTag.Name
+
+	subQuery, err := toIncrementedArgsQuery(joinTree.params.subQuery, len(*args))
+	if err != nil {
+		return relation.Relation{}, err
+	}
+	rel.SubQuery = subQuery
+
+	*args = append(*args, joinTree.params.args...)
+
+	fields := []relation.Field{}
+	for i := 1; i < typ.NumField(); i++ {
+		f := typ.Field(i)
+
+		tag := tags.NewJaggerTag(f.Tag.Get("jagger"))
+		jsonTag := tags.ParseSliceTag(f.Tag.Get("json"))
+
+		if tag.PK {
+			rel.PK = tag.Name
+		}
+
+		// this is a join field, will add these in the next loop
+		if tag.FK != "" {
+			continue
+		}
+
+		fields = append(fields, relation.Field{Json: jsonTag[0], Column: tag.Name})
+	}
+
+	rel.Fields = fields
+
+	var one, many []relation.Relation
+	for _, child := range joinTree.children {
+		f, ok := typ.FieldByName(child.field)
+		if !ok {
+			return relation.Relation{}, fmt.Errorf("Field %s not found", child.field)
+		}
+
+		rel, err := toRelation(f.Type, child, args)
+		if err != nil {
+			return relation.Relation{}, err
+		}
+
+		tag := tags.NewJaggerTag(f.Tag.Get("jagger"))
+		jsonTag := tags.ParseSliceTag(f.Tag.Get("json"))
+
+		rel.FK = tag.FK
+		rel.JsonName = jsonTag[0]
+
+		fType := f.Type
+		if fType.Kind() == reflect.Pointer {
+			fType = fType.Elem()
+		}
+
+		switch fType.Kind() {
+		case reflect.Slice:
+			many = append(many, rel)
+		case reflect.Struct:
+			one = append(one, rel)
+		default:
+			return relation.Relation{}, fmt.Errorf("Cant join %s type", fType.String())
+		}
+	}
+
+	rel.One = one
+	rel.Many = many
+
+	return rel, nil
 }
 
 func toIncrementedArgsQuery(query string, by int) (string, error) {
@@ -82,117 +208,16 @@ func toIncrementedArgsQuery(query string, by int) (string, error) {
 	return acc.String(), nil
 }
 
-func (qb *QueryBuilder) toRelation(target any, seen map[string]bool, args *[]any) (*relation.Relation, error) {
-	t, ok := target.(reflect.Type)
-	if !ok {
-		t = reflect.TypeOf(target)
-	}
-
-	if !relation.IsTable(t) {
-		return nil, errors.New("target not a table")
-	}
-
-	name := tags.NewJaggerTag(t.Field(0).Tag.Get("jagger")).Name
-	join, joinExists := qb.joins[name]
-
-	if seen[name] || !joinExists {
-		return nil, nil
-	}
-
-	subQuery, err := toIncrementedArgsQuery(join.subQuery, len(*args))
-	if err != nil {
-		return nil, err
-	}
-
-	*args = append(*args, join.args...)
-
-	seen[name] = true
-
-	fields := []relation.Field{}
-	one := []relation.Relation{}
-	many := []relation.Relation{}
-	pk := ""
-
-	for i := 1; i < t.NumField(); i++ {
-		f := t.Field(i)
-
-		tag := tags.NewJaggerTag(f.Tag.Get("jagger"))
-		jsonTag := tags.ParseSliceTag(f.Tag.Get("json"))
-
-		if tag.PK {
-			pk = tag.Name
-		}
-
-		if tag.FK == "" {
-			fields = append(fields, relation.Field{
-				Json:   jsonTag[0],
-				Column: tag.Name,
-			})
-			continue
-		}
-
-		rel := (*relation.Relation)(nil)
-		err := (error)(nil)
-
-		switch f.Type.Kind() {
-		case reflect.Struct:
-			rel, err = qb.toRelation(f.Type, seen, args)
-		case reflect.Pointer, reflect.Slice:
-			rel, err = qb.toRelation(f.Type.Elem(), seen, args)
-		}
-
-		if err != nil {
-			return nil, err
-		}
-		if rel == nil {
-			continue
-		}
-
-		typ := f.Type
-		if f.Type.Kind() == reflect.Pointer {
-			typ = typ.Elem()
-		}
-
-		rel.FK = tag.FK
-		rel.JsonAggName = jsonTag[0]
-
-		switch typ.Kind() {
-		case reflect.Slice:
-			many = append(many, *rel)
-		case reflect.Struct:
-			one = append(one, *rel)
-		}
-	}
-
-	rel := relation.Relation{
-		SubQuery:      subQuery,
-		JoinType:      join.joinType,
-		PK:            pk,
-		Table:         name,
-		Fields:        fields,
-		One:           one,
-		Many:          many,
-		JsonAggParams: join.jsonAggParams,
-	}
-
-	return &rel, nil
-}
-
 func (qb *QueryBuilder) ToSql() (string, []any, error) {
-	seen := map[string]bool{}
 	args := []any{}
 
 	if qb.target == nil {
-		return "", nil, errors.New("ToSql called without target")
+		return "", nil, fmt.Errorf("ToSql called without target")
 	}
 
-	rel, err := qb.toRelation(qb.target, seen, &args)
+	rel, err := toRelation(reflect.TypeOf(qb.target), newJoinTree(qb.params, qb.joins), &args)
 	if err != nil {
 		return "", nil, err
-	}
-
-	if len(seen) != len(qb.joins) {
-		return "", nil, errors.New(fmt.Sprintf("didn't use all joins (%v/%v)", len(seen), len(qb.joins)))
 	}
 
 	return rel.Render(), args, nil
@@ -208,47 +233,23 @@ func (qb *QueryBuilder) MustSql() (string, []any) {
 	return sql, args
 }
 
-func tableName(structure any) (string, error) {
-	t := reflect.TypeOf(structure)
-	if !relation.IsTable(t) {
-		return "", errors.New("non table passed to dbTable")
-	}
-
-	return tags.NewJaggerTag(t.Field(0).Tag.Get("jagger")).Name, nil
-}
-
 func NewQueryBuilder() *QueryBuilder {
-	return &QueryBuilder{joins: QueryBuilderJoins{}}
+	return &QueryBuilder{joins: map[string]joinParams{}}
 }
 
-func maybeDeref(v any) any {
-	val := reflect.ValueOf(v)
-	if val.Kind() == reflect.Pointer {
-		return val.Elem().Interface()
+func (qb *QueryBuilder) Select(table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
+	qb.target = table
+	qb.params = joinParams{
+		jsonAggParams: jsonAggParams,
+		subQuery:      subQuery,
+		args:          args,
 	}
 
-	return v
-}
-
-// panics if table arg is not table-like
-func (qb *QueryBuilder) Select(table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
-	table = maybeDeref(table)
-
-	qb.target = table
-	qb.Join("", table, jsonAggParams, subQuery, args...)
 	return qb
 }
 
-// panics if table is not table-like
-func (qb *QueryBuilder) Join(joinType JoinType, table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
-	table = maybeDeref(table)
-
-	name, err := tableName(table)
-	if err != nil {
-		panic(err)
-	}
-
-	qb.joins[name] = QueryBuilderJoin{
+func (qb *QueryBuilder) Join(joinType JoinType, path string, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
+	qb.joins[path] = joinParams{
 		joinType:      joinType,
 		subQuery:      subQuery,
 		args:          args,
@@ -258,24 +259,20 @@ func (qb *QueryBuilder) Join(joinType JoinType, table any, jsonAggParams string,
 	return qb
 }
 
-// panics if table arg is not table-like
-func (qb *QueryBuilder) LeftJoin(table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
-	return qb.Join(relation.LEFT_JOIN, table, jsonAggParams, subQuery, args...)
+func (qb *QueryBuilder) LeftJoin(path string, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
+	return qb.Join(relation.LEFT_JOIN, path, jsonAggParams, subQuery, args...)
 }
 
-// panics if table arg is not table-like
-func (qb *QueryBuilder) RightJoin(table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
-	return qb.Join(relation.RIGHT_JOIN, table, jsonAggParams, subQuery, args...)
+func (qb *QueryBuilder) RightJoin(path string, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
+	return qb.Join(relation.RIGHT_JOIN, path, jsonAggParams, subQuery, args...)
 }
 
-// panics if table arg is not table-like
-func (qb *QueryBuilder) InnerJoin(table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
-	return qb.Join(relation.INNER_JOIN, table, jsonAggParams, subQuery, args...)
+func (qb *QueryBuilder) InnerJoin(path string, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
+	return qb.Join(relation.INNER_JOIN, path, jsonAggParams, subQuery, args...)
 }
 
-// panics if table arg is not table-like
-func (qb *QueryBuilder) FullOuterJoin(table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
-	return qb.Join(relation.FULL_OUTER_JOIN, table, jsonAggParams, subQuery, args...)
+func (qb *QueryBuilder) FullOuterJoin(path string, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
+	return qb.Join(relation.FULL_OUTER_JOIN, path, jsonAggParams, subQuery, args...)
 }
 
 func (qb *QueryBuilder) Clone() *QueryBuilder {
@@ -285,9 +282,7 @@ func (qb *QueryBuilder) Clone() *QueryBuilder {
 	// the caller could still change for example
 	// the arguments, but this is fine
 	copied.target = qb.target
-	for k, v := range qb.joins {
-		copied.joins[k] = v
-	}
+	maps.Copy(copied.joins, qb.joins)
 
 	return copied
 }

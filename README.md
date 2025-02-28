@@ -5,8 +5,8 @@ A different way to query data from RDBMS
 ```go
 func main() {
     sql, args, err := jagger.NewQueryBuilder().
-        Select(User{}, "").
-        LeftJoin(UserSong{}, "select * from user_songs where id = ?", 2).
+        Select(User{}, "", "").
+        LeftJoin("Songs", "", "select * from user_songs where id = ?", 2).
         ToSql()
 }
 ```
@@ -32,7 +32,6 @@ FROM
 			USER_SONG.USER_ID
 	) USER_SONG ON USER_SONG.USER_ID = USER.ID
 ```
-
 
 <!--toc:start-->
 - [jagger](#jagger)
@@ -96,13 +95,14 @@ The methods accept an optional sub query as the second parameter to get the tabl
 
 
 ```go
-sql, args, err := jagger.NewQueryBuilder()
-	// [panics if struct is not a table] mandatory, will start to aggregate from this struct
-	Select(User{}, "select * from users order by id desc", arg1, arg2).
-	// [panics if struct is not a table] optional, all joins are available LeftJoin / RightJoin ... etc
-	LeftJoin(Song{}, "").
+sql, args, err := jagger.NewQueryBuilder().
+	Select(User{}, "", "select * from users order by id desc", arg1, arg2).
+	// join Songs AND User, which in this case is unnecessary as we already have user from select
+	LeftJoin("Songs.User", "", "").
+	// Join User.Songs.Tracks
+	LeftJoin("Songs.Tracks", "", "").
 	ToSql()
 ```
 
 The query builder is mutable, so select and join methods mutate, if you want to clone
-the current state, use `.Clone()` method
+the current state, use `.Clone()` method, but beware that this will be a shallow clone
