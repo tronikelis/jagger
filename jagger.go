@@ -83,18 +83,18 @@ func toRelation(typ reflect.Type, joinTree *joinTree, args *[]any) (relation.Rel
 		return relation.Relation{}, fmt.Errorf("Passed type not a table")
 	}
 
-	rel := relation.Relation{}
-	rel.JoinType = joinTree.params.joinType
-	rel.JsonAggParams = joinTree.params.jsonAggParams
+	currentRel := relation.Relation{}
+	currentRel.JoinType = joinTree.params.joinType
+	currentRel.JsonAggParams = joinTree.params.jsonAggParams
 
 	jaggerTag := tags.NewJaggerTag(typ.Field(0).Tag.Get("jagger"))
-	rel.Table = jaggerTag.Name
+	currentRel.Table = jaggerTag.Name
 
 	subQuery, err := toIncrementedArgsQuery(joinTree.params.subQuery, len(*args))
 	if err != nil {
 		return relation.Relation{}, err
 	}
-	rel.SubQuery = subQuery
+	currentRel.SubQuery = subQuery
 
 	*args = append(*args, joinTree.params.args...)
 
@@ -106,7 +106,7 @@ func toRelation(typ reflect.Type, joinTree *joinTree, args *[]any) (relation.Rel
 		jsonTag := tags.ParseSliceTag(f.Tag.Get("json"))
 
 		if tag.PK {
-			rel.PK = tag.Name
+			currentRel.PK = tag.Name
 		}
 
 		// this is a join field, will add these in the next loop
@@ -117,7 +117,7 @@ func toRelation(typ reflect.Type, joinTree *joinTree, args *[]any) (relation.Rel
 		fields = append(fields, relation.Field{Json: jsonTag[0], Column: tag.Name})
 	}
 
-	rel.Fields = fields
+	currentRel.Fields = fields
 
 	var one, many []relation.Relation
 	for _, child := range joinTree.children {
@@ -130,6 +130,7 @@ func toRelation(typ reflect.Type, joinTree *joinTree, args *[]any) (relation.Rel
 		if err != nil {
 			return relation.Relation{}, err
 		}
+		rel.ParentTable = currentRel.Table
 
 		tag := tags.NewJaggerTag(f.Tag.Get("jagger"))
 		jsonTag := tags.ParseSliceTag(f.Tag.Get("json"))
@@ -152,10 +153,10 @@ func toRelation(typ reflect.Type, joinTree *joinTree, args *[]any) (relation.Rel
 		}
 	}
 
-	rel.One = one
-	rel.Many = many
+	currentRel.One = one
+	currentRel.Many = many
 
-	return rel, nil
+	return currentRel, nil
 }
 
 func toIncrementedArgsQuery(query string, by int) (string, error) {

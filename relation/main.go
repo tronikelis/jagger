@@ -42,7 +42,10 @@ type Field struct {
 }
 
 type Relation struct {
-	Table string
+	// Thought to have *Relation, but I will only use parent table
+	// So this is simpler
+	ParentTable string
+	Table       string
 
 	FK            string
 	PK            string
@@ -58,11 +61,16 @@ type Relation struct {
 }
 
 func (r Relation) name() string {
-	return fmt.Sprintf("%s.%s", r.Table, r.JsonName)
+	table := r.Table
+	if r.ParentTable != "" {
+		table = r.ParentTable
+	}
+
+	return fmt.Sprintf("%s.%s", table, r.JsonName)
 }
 
 func (r Relation) nameJson() string {
-	return fmt.Sprintf("%s.%s_json", r.Table, r.JsonName)
+	return r.name() + "_json"
 }
 
 func (r Relation) jsonAgg() string {
