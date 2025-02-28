@@ -27,40 +27,40 @@ type joinParams struct {
 type joinTree struct {
 	field    string
 	params   joinParams
-	children []joinTree
+	children []*joinTree
 }
 
-func upsertJoinTree(current []joinTree, params joinParams, fields []string, index int) []joinTree {
-	field := fields[index]
+func upsertJoinTree(current *joinTree, params joinParams, fields []string) {
+	for i, field := range fields {
+		found := false
 
-	for i, child := range current {
-		if child.field == field {
-			if index == len(fields)-1 {
-				current[i].params = params
-				return current
+		for _, child := range current.children {
+			if child.field == field {
+				current = child
+				found = true
+				break
 			}
+		}
 
-			current[i].children = upsertJoinTree(child.children, params, fields, index+1)
-			return current
+		if !found {
+			j := &joinTree{field: field}
+			j.params.joinType = params.joinType
+			current.children = append(current.children, j)
+			current = j
+		}
+
+		if i == len(fields)-1 {
+			current.params = params
 		}
 	}
-
-	j := joinTree{field: field}
-	if j.params.joinType == "" {
-		j.params.joinType = params.joinType
-	}
-
-	current = append(current, upsertJoinTree([]joinTree{j}, params, fields, index)...)
-
-	return current
 }
 
-func newJoinTree(rootParams joinParams, joins map[string]joinParams) joinTree {
-	joinTree := joinTree{params: rootParams}
+func newJoinTree(rootParams joinParams, joins map[string]joinParams) *joinTree {
+	joinTree := &joinTree{params: rootParams}
 
 	for k, v := range joins {
 		fields := strings.Split(k, ".")
-		joinTree.children = upsertJoinTree(joinTree.children, v, fields, 0)
+		upsertJoinTree(joinTree, v, fields)
 	}
 
 	return joinTree
@@ -74,7 +74,7 @@ type QueryBuilder struct {
 	joins map[string]joinParams
 }
 
-func toRelation(typ reflect.Type, joinTree joinTree, args *[]any) (relation.Relation, error) {
+func toRelation(typ reflect.Type, joinTree *joinTree, args *[]any) (relation.Relation, error) {
 	if typ.Kind() == reflect.Pointer || typ.Kind() == reflect.Slice {
 		typ = typ.Elem()
 	}
