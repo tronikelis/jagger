@@ -1,36 +1,142 @@
 # jagger
 
-A different way to query data from RDBMS
+What if you could `json.Unmarshal` your rdbms relations? (only pg supported for now)
 
 ```go
 func main() {
+  type SongTack struct {
+    jagger.BaseTable `jagger:"song_track"`
+
+    ID     int       `jagger:"id,pk:" json:"id"`
+    SongId int       `jagger:"song_id" json:"song_id"`
+    Song   *UserSong `jagger:", fk:song_id" json:"song"`
+  }
+
+  type UserSong struct {
+    jagger.BaseTable `jagger:"user_song"`
+
+    ID     int        `jagger:"id,pk:" json:"id"`
+    UserId int        `jagger:"user_id" json:"user_id"`
+    User   *User      `jagger:",fk:user_id" json:"user"`
+    Tracks []SongTack `jagger:",fk:song_id" json:"tracks"`
+  }
+
+  type User struct {
+    jagger.BaseTable `jagger:"user"`
+
+    ID    int        `jagger:"id,pk:" json:"id"`
+    Songs []UserSong `jagger:",fk:user_id" json:"songs"`
+  }
+
     sql, args, err := jagger.NewQueryBuilder().
-        Select(User{}, "", "").
-        LeftJoin("Songs", "", "select * from user_songs where id = ?", 2).
-        ToSql()
+      Select(User{}, "", "").
+      LeftJoin("Songs.User", "", "select * from user_songs where id = ?", 2).
+      LeftJoin("Songs.Tracks", "", "").
+      ToSql()
 }
 ```
 
-This generates something similar to this
+This turns your relation into expected json format
 
 ```sql
-SELECT
-	JSON_AGG(
-		JSON_BUILD_OBJECT('id', USER.ID, 'songs', SONGS_JSON)
-	) _JSON
-FROM
-	USER
-	LEFT JOIN (
-		SELECT
-			USER_SONG.USER_ID,
-			JSON_AGG(
-				JSON_BUILD_OBJECT('id', USER_SONG.ID, 'user_id', USER_SONG.USER_ID)
-			) SONGS_JSON
-		FROM
-			(select * from user_song where id = ?) USER_SONG
-		GROUP BY
-			USER_SONG.USER_ID
-	) USER_SONG ON USER_SONG.USER_ID = USER.ID
+select
+  json_agg (
+    case
+      when "user."."id" is null then null
+      else json_strip_nulls (
+        json_build_object ('id', "user."."id", 'songs', "user.songs_json")
+      )
+    end
+  ) "user._json"
+from
+  "user" as "user."
+  left join (
+    select
+      "user.songs"."user_id",
+      json_agg (
+        case
+          when "user.songs"."id" is null then null
+          else json_strip_nulls (
+            json_build_object (
+              'id',
+              "user.songs"."id",
+              'user_id',
+              "user.songs"."user_id",
+              'user',
+              case
+                when "user_song.user"."id" is null then null
+                else json_strip_nulls (json_build_object ('id', "user_song.user"."id"))
+              end,
+              'tracks',
+              "user_song.tracks_json"
+            )
+          )
+        end
+      ) "user.songs_json"
+    from
+      "user_song" as "user.songs"
+      left join (
+        select
+          *
+        from
+          user_songs
+        where
+          id = ?
+      ) "user_song.user" on "user_song.user"."id" = "user.songs"."user_id"
+      left join (
+        select
+          "user_song.tracks"."song_id",
+          json_agg (
+            case
+              when "user_song.tracks"."id" is null then null
+              else json_strip_nulls (
+                json_build_object (
+                  'id',
+                  "user_song.tracks"."id",
+                  'song_id',
+                  "user_song.tracks"."song_id"
+                )
+              )
+            end
+          ) "user_song.tracks_json"
+        from
+          "song_track" as "user_song.tracks"
+        group by
+          "user_song.tracks"."song_id"
+      ) "user_song.tracks" on "user_song.tracks"."song_id" = "user.songs"."id"
+    group by
+      "user.songs"."user_id"
+  ) "user.songs" on "user.songs"."user_id" = "user."."id"
+```
+
+When you send this sql to postgres, it will return this json
+
+```jsonc
+[
+  {
+    // user
+    "id": 1,
+    // user has many songs
+    "songs": [
+      {
+        // song has one user
+        "user": {
+          "id": 1,
+        },
+        "user_id": 1,
+        // song has many tracks
+        "tracks": [
+          {
+            // track has one song
+            // you could join this also easily with Songs.Tracks.Song
+            "id": 1,
+            "song_id": 1
+          }
+        ]
+      }
+    ]
+  }
+]
 ```
 
 <!--toc:start-->
@@ -54,7 +160,7 @@ The query builder supports a struct if it has `jagger.BaseTable` embedded like s
 
 ```go
 type User struct {
-	jagger.BaseTable `jagger:"user"`
+  jagger.BaseTable `jagger:"user"`
 }
 ```
 
@@ -66,7 +172,7 @@ specify it on relation fields, e.g.
 
 ```go
 type Song struct {
-	User *User `jagger:", fk:user_id"`
+  User *User `jagger:", fk:user_id"`
 }
 ```
 
@@ -76,11 +182,11 @@ the column on which the foreign key resides
 
 ```go
 type User struct {
-	Songs []Song `jagger:", fk:user_id"`
+  Songs []Song `jagger:", fk:user_id"`
 }
 type Song struct {
-	UserId int `jagger:"user_id"`
-	User *User `jagger:", fk:user_id"`
+  UserId int `jagger:"user_id"`
+  User *User `jagger:", fk:user_id"`
 }
 ```
 
@@ -96,12 +202,12 @@ The methods accept an optional sub query as the second parameter to get the tabl
 
 ```go
 sql, args, err := jagger.NewQueryBuilder().
-	Select(User{}, "", "select * from users order by id desc", arg1, arg2).
-	// join Songs AND User, which in this case is unnecessary as we already have user from select
-	LeftJoin("Songs.User", "", "").
-	// Join User.Songs.Tracks
-	LeftJoin("Songs.Tracks", "", "").
-	ToSql()
+  Select(User{}, "", "select * from users order by id desc", arg1, arg2).
+  // join Songs AND User, which in this case is unnecessary as we already have user from select
+  LeftJoin("Songs.User", "", "").
+  // Join User.Songs.Tracks
+  LeftJoin("Songs.Tracks", "", "").
+  ToSql()
 ```
 
 The query builder is mutable, so select and join methods mutate, if you want to clone
