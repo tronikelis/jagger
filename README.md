@@ -139,6 +139,20 @@ When you send this sql to postgres, it will return this json
 ]
 ```
 
+Now all thats left is to unmarshal it into `User` struct
+
+```go
+var b []byte
+if err := pg.Query(sql, args).Scan(&b); err != nil {
+  return err
+}
+
+var u []User
+if err := json.Unmarshal(b, &u); err != nil {
+  return err
+}
+```
+
 <!--toc:start-->
 - [jagger](#jagger)
   - [Usage](#usage)
