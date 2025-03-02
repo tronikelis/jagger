@@ -206,6 +206,14 @@ type Song struct {
 
 notice how the `fk` is the same on both relations `User/Song`
 
+`pk:` is to specify that this column is the primary key, should only be set on one column per struct
+
+```go
+type User struct {
+  ID int `jagger:"id,pk:"`
+}
+```
+
 ### Querying
 
 This package is responsible only for the json aggregation,
