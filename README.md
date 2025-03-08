@@ -5,11 +5,13 @@ What if you could `json.Unmarshal` your rdbms relations? (only pg supported for 
 ```go
 type User struct {
   jagger.BaseTable `jagger:"users"`
+  Id int `json:"id" jagger:"id,pk:"`
   Songs []Song `json:"songs" jagger:",fk:user_id"`
 }
 
 type Song struct {
   jagger.BaseTable `jagger:"songs"`
+  Id int `json:"id" jagger:"id,pk:"`
   UserId int `json:"user_id" jagger:"user_id"`
   User *User `json:"user" jagger:",fk:user_id"`
 }
