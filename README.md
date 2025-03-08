@@ -3,40 +3,30 @@
 What if you could `json.Unmarshal` your rdbms relations? (only pg supported for now)
 
 ```go
+type User struct {
+  jagger.BaseTable `jagger:"users"`
+  Songs []Song `json:"songs" jagger:",fk:user_id"`
+}
+
+type Song struct {
+  jagger.BaseTable `jagger:"songs"`
+  UserId int `json:"user_id" jagger:"user_id"`
+  User *User `json:"user" jagger:",fk:user_id"`
+}
+
 func main() {
-  type SongTack struct {
-    jagger.BaseTable `jagger:"song_track"`
-
-    ID     int       `jagger:"id,pk:" json:"id"`
-    SongId int       `jagger:"song_id" json:"song_id"`
-    Song   *UserSong `jagger:", fk:song_id" json:"song"`
-  }
-
-  type UserSong struct {
-    jagger.BaseTable `jagger:"user_song"`
-
-    ID     int        `jagger:"id,pk:" json:"id"`
-    UserId int        `jagger:"user_id" json:"user_id"`
-    User   *User      `jagger:",fk:user_id" json:"user"`
-    Tracks []SongTack `jagger:",fk:song_id" json:"tracks"`
-  }
-
-  type User struct {
-    jagger.BaseTable `jagger:"user"`
-
-    ID    int        `jagger:"id,pk:" json:"id"`
-    Songs []UserSong `jagger:",fk:user_id" json:"songs"`
-  }
-
-    sql, args, err := jagger.NewQueryBuilder().
-      Select(User{}, "", "").
-      LeftJoin("Songs.User", "", "select * from user_songs where id = ?", 2).
-      LeftJoin("Songs.Tracks", "", "").
-      ToSql()
+  sql, args, err := jagger.NewQueryBuilder().
+    // Select initial struct, add json_agg suffix if desired, subquery which to select from (optional)
+    Select(User{}, "json_agg suffix", "select * from users").
+    // left join direct field
+    LeftJoin("Songs", "", "").
+    // nested relations also supported
+    LeftJoin("Songs.User", "", "").
+    ToSql()
 }
 ```
 
-This turns your relation into expected json format
+This turns your relation into expected json format when you call `.ToSql()` (just a random example, not the direct generation from the above query)
 
 ```sql
 select
@@ -66,9 +56,7 @@ from
               case
                 when "user_song.user"."id" is null then null
                 else json_strip_nulls (json_build_object ('id', "user_song.user"."id"))
-              end,
-              'tracks',
-              "user_song.tracks_json"
+              end
             )
           )
         end
@@ -83,27 +71,6 @@ from
         where
           id = ?
       ) "user_song.user" on "user_song.user"."id" = "user.songs"."user_id"
-      left join (
-        select
-          "user_song.tracks"."song_id",
-          json_agg (
-            case
-              when "user_song.tracks"."id" is null then null
-              else json_strip_nulls (
-                json_build_object (
-                  'id',
-                  "user_song.tracks"."id",
-                  'song_id',
-                  "user_song.tracks"."song_id"
-                )
-              )
-            end
-          ) "user_song.tracks_json"
-        from
-          "song_track" as "user_song.tracks"
-        group by
-          "user_song.tracks"."song_id"
-      ) "user_song.tracks" on "user_song.tracks"."song_id" = "user.songs"."id"
     group by
       "user.songs"."user_id"
   ) "user.songs" on "user.songs"."user_id" = "user."."id"
@@ -123,16 +90,7 @@ When you send this sql to postgres, it will return this json
         "user": {
           "id": 1,
         },
-        "user_id": 1,
-        // song has many tracks
-        "tracks": [
-          {
-            // track has one song
-            // you could join this also easily with Songs.Tracks.Song
-            "id": 1,
-            "song_id": 1
-          }
-        ]
+        "user_id": 1
       }
     ]
   }
