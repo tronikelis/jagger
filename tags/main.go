@@ -1,17 +1,21 @@
 package tags
 
-import "strings"
+import (
+	"reflect"
+	"strings"
+)
 
 type JaggerTag struct {
-	Name string
-	PK   bool
-	FK   string
+	Name  string
+	PK    bool
+	FK    string
+	Embed bool
 }
 
-func NewJaggerTag(tag string) JaggerTag {
+func NewJaggerTag(tag reflect.StructTag) JaggerTag {
 	dt := JaggerTag{}
 
-	comma := strings.Split(tag, ",")
+	comma := strings.Split(tag.Get("jagger"), ",")
 	dt.Name = strings.TrimSpace(comma[0])
 
 	mp := ParseMapTag(strings.Join(comma[1:], ","))
@@ -22,6 +26,8 @@ func NewJaggerTag(tag string) JaggerTag {
 			dt.PK = true
 		case "fk":
 			dt.FK = v
+		case "embed":
+			dt.Embed = true
 		}
 	}
 

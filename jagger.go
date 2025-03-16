@@ -12,9 +12,10 @@ import (
 	"github.com/tronikelis/jagger/tags"
 )
 
+type BaseTable struct{}
+
 type (
-	BaseTable = relation.BaseTable
-	JoinType  = relation.JoinType
+	JoinType = relation.JoinType
 )
 
 type joinParams struct {
@@ -74,35 +75,74 @@ type QueryBuilder struct {
 	joins map[string]joinParams
 }
 
-func toRelation(typ reflect.Type, joinTree *joinTree, args *[]any) (relation.Relation, error) {
+type table struct {
+	name         string
+	fieldsByName map[string]reflect.StructField
+	fields       []reflect.StructField
+}
+
+func newTable(typ reflect.Type) (table, error) {
 	if typ.Kind() == reflect.Pointer || typ.Kind() == reflect.Slice {
 		typ = typ.Elem()
 	}
-
-	if !relation.IsTable(typ) {
-		return relation.Relation{}, fmt.Errorf("Passed type not a table")
+	if typ.Kind() != reflect.Struct {
+		return table{}, fmt.Errorf("Passed type not struct, got %v", typ)
 	}
 
-	currentRel := relation.Relation{}
-	currentRel.JoinType = joinTree.params.joinType
-	currentRel.JsonAggParams = joinTree.params.jsonAggParams
+	var i int
 
-	jaggerTag := tags.NewJaggerTag(typ.Field(0).Tag.Get("jagger"))
-	currentRel.Table = jaggerTag.Name
+	t := table{fieldsByName: map[string]reflect.StructField{}}
+	if typ.NumField() > 1 && typ.Field(0).Type == reflect.TypeOf(BaseTable{}) {
+		t.name = tags.NewJaggerTag(typ.Field(0).Tag).Name
+		i++
+	}
 
+	for ; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		tag := tags.NewJaggerTag(field.Tag)
+
+		if tag.Embed {
+			embedded, err := newTable(field.Type)
+			if err != nil {
+				return table{}, err
+			}
+
+			maps.Copy(t.fieldsByName, embedded.fieldsByName)
+			t.fields = append(t.fields, embedded.fields...)
+			if t.name == "" {
+				t.name = embedded.name
+			}
+			continue
+		}
+
+		if tag.Name == "-" || reflect.ValueOf(tag).IsZero() {
+			continue
+		}
+
+		t.fieldsByName[field.Name] = field
+		t.fields = append(t.fields, field)
+	}
+
+	return t, nil
+}
+
+func toRelation(table table, joinTree *joinTree, args *[]any) (relation.Relation, error) {
 	subQuery, err := toIncrementedArgsQuery(joinTree.params.subQuery, len(*args))
 	if err != nil {
 		return relation.Relation{}, err
 	}
-	currentRel.SubQuery = subQuery
+
+	currentRel := relation.Relation{
+		JoinType:      joinTree.params.joinType,
+		JsonAggParams: joinTree.params.jsonAggParams,
+		Table:         table.name,
+		SubQuery:      subQuery,
+	}
 
 	*args = append(*args, joinTree.params.args...)
 
-	fields := []relation.Field{}
-	for i := 1; i < typ.NumField(); i++ {
-		f := typ.Field(i)
-
-		tag := tags.NewJaggerTag(f.Tag.Get("jagger"))
+	for _, f := range table.fields {
+		tag := tags.NewJaggerTag(f.Tag)
 		jsonTag := tags.ParseSliceTag(f.Tag.Get("json"))
 
 		if tag.PK {
@@ -114,25 +154,27 @@ func toRelation(typ reflect.Type, joinTree *joinTree, args *[]any) (relation.Rel
 			continue
 		}
 
-		fields = append(fields, relation.Field{Json: jsonTag[0], Column: tag.Name})
+		currentRel.Fields = append(currentRel.Fields, relation.Field{Json: jsonTag[0], Column: tag.Name})
 	}
 
-	currentRel.Fields = fields
-
-	var one, many []relation.Relation
 	for _, child := range joinTree.children {
-		f, ok := typ.FieldByName(child.field)
+		f, ok := table.fieldsByName[child.field]
 		if !ok {
 			return relation.Relation{}, fmt.Errorf("Field %s not found", child.field)
 		}
 
-		rel, err := toRelation(f.Type, child, args)
+		t, err := newTable(f.Type)
+		if err != nil {
+			return relation.Relation{}, err
+		}
+
+		rel, err := toRelation(t, child, args)
 		if err != nil {
 			return relation.Relation{}, err
 		}
 		rel.ParentTable = currentRel.Table
 
-		tag := tags.NewJaggerTag(f.Tag.Get("jagger"))
+		tag := tags.NewJaggerTag(f.Tag)
 		jsonTag := tags.ParseSliceTag(f.Tag.Get("json"))
 
 		rel.FK = tag.FK
@@ -145,16 +187,13 @@ func toRelation(typ reflect.Type, joinTree *joinTree, args *[]any) (relation.Rel
 
 		switch fType.Kind() {
 		case reflect.Slice:
-			many = append(many, rel)
+			currentRel.Many = append(currentRel.Many, rel)
 		case reflect.Struct:
-			one = append(one, rel)
+			currentRel.One = append(currentRel.One, rel)
 		default:
 			return relation.Relation{}, fmt.Errorf("Cant join %s type", fType.String())
 		}
 	}
-
-	currentRel.One = one
-	currentRel.Many = many
 
 	return currentRel, nil
 }
@@ -216,7 +255,12 @@ func (qb *QueryBuilder) ToSql() (string, []any, error) {
 		return "", nil, fmt.Errorf("ToSql called without target")
 	}
 
-	rel, err := toRelation(reflect.TypeOf(qb.target), newJoinTree(qb.params, qb.joins), &args)
+	table, err := newTable(reflect.TypeOf(qb.target))
+	if err != nil {
+		return "", nil, err
+	}
+
+	rel, err := toRelation(table, newJoinTree(qb.params, qb.joins), &args)
 	if err != nil {
 		return "", nil, err
 	}
