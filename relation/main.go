@@ -2,15 +2,8 @@ package relation
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 )
-
-type BaseTable struct{}
-
-func IsTable(typ reflect.Type) bool {
-	return typ.Kind() == reflect.Struct && typ.Field(0).Type == reflect.TypeOf(BaseTable{})
-}
 
 func col(cols ...string) string {
 	builder := strings.Builder{}
