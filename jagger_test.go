@@ -189,3 +189,22 @@ func TestPassPointerTable(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, sql)
 }
+
+type SomeFieldBar struct {
+	Bar string `json:"bar" jagger:"bar"`
+}
+
+type EmbeddedUser struct {
+	User         `jagger:",embed:"`
+	SomeFieldBar `jagger:",embed:"`
+	Foo          string `json:"foo" jagger:"foo"`
+}
+
+func TestEmbedded(t *testing.T) {
+	sql, _ := qb().
+		Select(EmbeddedUser{}, "", "select *, foo, bar from user").
+		LeftJoin("Songs", "", "").
+		MustSql()
+
+	assert.Equal(t, `select json_agg(case when "user."."id" is null then null else json_strip_nulls(json_build_object('id', "user."."id",'bar', "user."."bar",'foo', "user."."foo",'songs', "user.songs_json")) end) "user._json" from (select *, foo, bar from user) "user." left join (select "user.songs"."user_id", json_agg(case when "user.songs"."id" is null then null else json_strip_nulls(json_build_object('id', "user.songs"."id",'user_id', "user.songs"."user_id")) end) "user.songs_json" from "user_song" as "user.songs"  group by "user.songs"."user_id") "user.songs" on "user.songs"."user_id" = "user."."id"`, sql)
+}

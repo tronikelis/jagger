@@ -82,45 +82,58 @@ type table struct {
 }
 
 func newTable(typ reflect.Type) (table, error) {
-	if typ.Kind() == reflect.Pointer || typ.Kind() == reflect.Slice {
-		typ = typ.Elem()
-	}
-	if typ.Kind() != reflect.Struct {
-		return table{}, fmt.Errorf("Passed type not struct, got %v", typ)
-	}
-
-	var i int
-
-	t := table{fieldsByName: map[string]reflect.StructField{}}
-	if typ.NumField() > 1 && typ.Field(0).Type == reflect.TypeOf(BaseTable{}) {
-		t.name = tags.NewJaggerTag(typ.Field(0).Tag).Name
-		i++
-	}
-
-	for ; i < typ.NumField(); i++ {
-		field := typ.Field(i)
-		tag := tags.NewJaggerTag(field.Tag)
-
-		if tag.Embed {
-			embedded, err := newTable(field.Type)
-			if err != nil {
-				return table{}, err
-			}
-
-			maps.Copy(t.fieldsByName, embedded.fieldsByName)
-			t.fields = append(t.fields, embedded.fields...)
-			if t.name == "" {
-				t.name = embedded.name
-			}
-			continue
+	var inner func(typ reflect.Type) (table, error)
+	inner = func(typ reflect.Type) (table, error) {
+		if typ.Kind() == reflect.Pointer || typ.Kind() == reflect.Slice {
+			typ = typ.Elem()
+		}
+		if typ.Kind() != reflect.Struct {
+			return table{}, fmt.Errorf("Passed type not struct, got %v", typ)
 		}
 
-		if tag.Name == "-" || reflect.ValueOf(tag).IsZero() {
-			continue
+		t := table{fieldsByName: map[string]reflect.StructField{}}
+
+		for i := range typ.NumField() {
+			field := typ.Field(i)
+			tag := tags.NewJaggerTag(field.Tag)
+
+			if field.Type == reflect.TypeOf(BaseTable{}) {
+				t.name = tag.Name
+				continue
+			}
+
+			if tag.Embed {
+				embedded, err := inner(field.Type)
+				if err != nil {
+					return table{}, err
+				}
+
+				maps.Copy(t.fieldsByName, embedded.fieldsByName)
+				t.fields = append(t.fields, embedded.fields...)
+				if embedded.name != "" {
+					t.name = embedded.name
+				}
+				continue
+			}
+
+			if tag.Name == "-" || reflect.ValueOf(tag).IsZero() {
+				continue
+			}
+
+			t.fieldsByName[field.Name] = field
+			t.fields = append(t.fields, field)
 		}
 
-		t.fieldsByName[field.Name] = field
-		t.fields = append(t.fields, field)
+		return t, nil
+	}
+
+	t, err := inner(typ)
+	if err != nil {
+		return table{}, err
+	}
+
+	if t.name == "" {
+		return table{}, fmt.Errorf("Passed type does not have BaseTable embedded")
 	}
 
 	return t, nil
