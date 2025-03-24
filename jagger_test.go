@@ -134,14 +134,14 @@ func TestCorrectArgOrder(t *testing.T) {
 type UserWithSpace struct {
 	jagger.BaseTable `jagger:"user with space"`
 
-	ID   int       `jagger:"id with space" json:"id with space"`
+	ID   int       `jagger:"id with space,pk:" json:"id with space"`
 	Song *UserSong `jagger:", fk:song id" json:"song with space"`
 }
 
 func TestQuotes(t *testing.T) {
 	sql, _, _ := qb().Select(UserWithSpace{}, "", "").LeftJoin("Song", "", "").ToSql()
 
-	assert.Equal(t, `select json_agg(case when "user with space."."" is null then null else json_strip_nulls(json_build_object('id with space', "user with space."."id with space",'song with space', case when "user with space.song with space"."id" is null then null else json_strip_nulls(json_build_object('id', "user with space.song with space"."id",'user_id', "user with space.song with space"."user_id")) end)) end) "user with space._json" from "user with space" as "user with space." left join "user_song" as "user with space.song with space" on "user with space.song with space"."id" = "user with space."."song id"  `, sql)
+	assert.Equal(t, `select json_agg(case when "user with space."."id with space" is null then null else json_strip_nulls(json_build_object('id with space', "user with space."."id with space",'song with space', case when "user with space.song with space"."id" is null then null else json_strip_nulls(json_build_object('id', "user with space.song with space"."id",'user_id', "user with space.song with space"."user_id")) end)) end) "user with space._json" from "user with space" as "user with space." left join "user_song" as "user with space.song with space" on "user with space.song with space"."id" = "user with space."."song id"  `, sql)
 }
 
 func TestClone(t *testing.T) {
@@ -207,4 +207,18 @@ func TestEmbedded(t *testing.T) {
 		MustSql()
 
 	assert.Equal(t, `select json_agg(case when "user."."id" is null then null else json_strip_nulls(json_build_object('id', "user."."id",'bar', "user."."bar",'foo', "user."."foo",'songs', "user.songs_json")) end) "user._json" from (select *, foo, bar from user) "user." left join (select "user.songs"."user_id", json_agg(case when "user.songs"."id" is null then null else json_strip_nulls(json_build_object('id', "user.songs"."id",'user_id', "user.songs"."user_id")) end) "user.songs_json" from "user_song" as "user.songs"  group by "user.songs"."user_id") "user.songs" on "user.songs"."user_id" = "user."."id"`, sql)
+}
+
+type EmptyPk struct {
+	jagger.BaseTable `jagger:"ttt"`
+
+	Id int `jagger:"id" json:"id"`
+}
+
+func TestEmptyPkSkipsCaseWhen(t *testing.T) {
+	sql, _ := qb().
+		Select(EmptyPk{}, "", "").
+		MustSql()
+
+	assert.Equal(t, `select json_agg(json_strip_nulls(json_build_object('id', "ttt."."id"))) "ttt._json" from "ttt" as "ttt." `, sql)
 }
