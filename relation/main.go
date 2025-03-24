@@ -40,8 +40,10 @@ type Relation struct {
 	ParentTable string
 	Table       string
 
+	// this can be empty, for example pivot tables
+	PK string
+
 	FK            string
-	PK            string
 	JsonName      string
 	JsonAggParams string
 
@@ -79,11 +81,26 @@ func (r Relation) jsonAgg() string {
 	return builder.String()
 }
 
+func (self Relation) stripNulls(input string) string {
+	builder := strings.Builder{}
+
+	if self.PK != "" {
+		builder.WriteString(fmt.Sprintf("case when %s is null then null else ", col(self.name(), self.PK)))
+	}
+
+	builder.WriteString("json_strip_nulls(json_build_object(")
+	builder.WriteString(input)
+
+	builder.WriteString("))")
+	if self.PK != "" {
+		builder.WriteString(" end")
+	}
+
+	return builder.String()
+}
+
 func (r Relation) jsonBuildObject() string {
 	builder := strings.Builder{}
-	builder.WriteString(fmt.Sprintf(
-		"case when %s is null then null else json_strip_nulls(json_build_object(", col(r.name(), r.PK),
-	))
 
 	for _, f := range r.Fields {
 		builder.WriteString(fmt.Sprintf(`'%s', %s,`, f.Json, col(r.name(), f.Column)))
@@ -98,11 +115,9 @@ func (r Relation) jsonBuildObject() string {
 	}
 
 	result := builder.String()
-
 	result = result[:len(result)-1]
-	result += ")) end"
 
-	return result
+	return r.stripNulls(result)
 }
 
 func (r Relation) oneJoin() string {
