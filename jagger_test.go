@@ -1,11 +1,108 @@
 package jagger_test
 
 import (
+	"io"
+	"os"
+	"os/exec"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/tronikelis/jagger"
 )
+
+func snapshotQbAsync(t *testing.T, wg *sync.WaitGroup, qb *jagger.QueryBuilder, file string) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		snapshotQb(t, qb, file)
+	}()
+}
+
+func snapshotQb(t *testing.T, qb *jagger.QueryBuilder, file string) {
+	sql, _, err := qb.ToSql()
+	assert.NoError(t, err)
+
+	newSql, err := cmd(sql, "npx", "sql-formatter", "-l", "postgresql")
+	if err != nil {
+		panic(err)
+	}
+
+	if os.Getenv("WRITE_SQL_SNAPSHOTS") == "true" {
+		if err := os.WriteFile(file, []byte(newSql), 0o644); err != nil {
+			panic(err)
+		}
+		return
+	}
+
+	oldSqlBytes, err := os.ReadFile(file)
+	if err != nil {
+		panic(err)
+	}
+
+	oldSql := string(oldSqlBytes)
+	assert.Equal(t, oldSql, newSql)
+}
+
+func cmd(stdin string, name string, args ...string) (string, error) {
+	cmd := exec.Command(name, args...)
+
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return "", err
+	}
+
+	stdinPipe, err := cmd.StdinPipe()
+	if err != nil {
+		return "", nil
+	}
+
+	if err := cmd.Start(); err != nil {
+		return "", err
+	}
+
+	stdinErrChan := make(chan error)
+	stdoutErrChan := make(chan error)
+	stdoutChan := make(chan []byte)
+
+	go func() {
+		_, err := stdinPipe.Write([]byte(stdin))
+		if err != nil {
+			stdinErrChan <- err
+			return
+		}
+
+		if err := stdinPipe.Close(); err != nil {
+			stdinErrChan <- err
+			return
+		}
+
+		stdinErrChan <- nil
+	}()
+
+	go func() {
+		read, err := io.ReadAll(stdoutPipe)
+		if err != nil {
+			stdoutErrChan <- err
+			return
+		}
+		stdoutErrChan <- nil
+		stdoutChan <- read
+	}()
+
+	if err := cmd.Wait(); err != nil {
+		return "", err
+	}
+
+	if err := <-stdinErrChan; err != nil {
+		return "", err
+	}
+	if err := <-stdoutErrChan; err != nil {
+		return "", err
+	}
+
+	return string(<-stdoutChan), nil
+}
 
 type SongTack struct {
 	jagger.BaseTable `jagger:"song_track"`
@@ -35,42 +132,24 @@ func qb() *jagger.QueryBuilder {
 	return jagger.NewQueryBuilder()
 }
 
+const TEST_SQL_BASE = "tests/sql"
+
 func TestSimpleQuery(t *testing.T) {
-	sql, args, err := qb().
-		Select(User{}, "", "").
-		ToSql()
+	file := TEST_SQL_BASE + "/test_simple_query"
+	wg := sync.WaitGroup{}
+	defer wg.Wait()
 
-	assert.Equal(t, `select json_agg(case when "user."."id" is null then null else json_strip_nulls(json_build_object('id', "user."."id")) end) "user._json" from "user" as "user." `, sql)
-	assert.Equal(t, []any{}, args)
-	assert.NoError(t, err)
-
-	sql, args, err = qb().
-		Select(User{}, "", "user subquery").
-		ToSql()
-
-	assert.Equal(t, `select json_agg(case when "user."."id" is null then null else json_strip_nulls(json_build_object('id', "user."."id")) end) "user._json" from (user subquery) "user." `, sql)
-	assert.Equal(t, []any{}, args)
-	assert.NoError(t, err)
+	snapshotQbAsync(t, &wg, qb().Select(User{}, "", ""), file+"1.sql")
+	snapshotQbAsync(t, &wg, qb().Select(User{}, "", "select * from users"), file+"2.sql")
 }
 
 func TestOneToMany(t *testing.T) {
-	sql, args, err := qb().
-		Select(User{}, "", "").
-		LeftJoin("Songs", "", "").
-		ToSql()
+	file := TEST_SQL_BASE + "/test_one_to_many"
+	wg := sync.WaitGroup{}
+	defer wg.Wait()
 
-	assert.Equal(t, `select json_agg(case when "user."."id" is null then null else json_strip_nulls(json_build_object('id', "user."."id",'songs', "user.songs_json")) end) "user._json" from "user" as "user." left join (select "user.songs"."user_id", json_agg(case when "user.songs"."id" is null then null else json_strip_nulls(json_build_object('id', "user.songs"."id",'user_id', "user.songs"."user_id")) end) "user.songs_json" from "user_song" as "user.songs"  group by "user.songs"."user_id") "user.songs" on "user.songs"."user_id" = "user."."id"`, sql)
-	assert.Equal(t, []any{}, args)
-	assert.NoError(t, err)
-
-	sql, args, err = qb().
-		Select(User{}, "", "").
-		LeftJoin("Songs", "", "song sub").
-		ToSql()
-
-	assert.Equal(t, `select json_agg(case when "user."."id" is null then null else json_strip_nulls(json_build_object('id', "user."."id",'songs', "user.songs_json")) end) "user._json" from "user" as "user." left join (select "user.songs"."user_id", json_agg(case when "user.songs"."id" is null then null else json_strip_nulls(json_build_object('id', "user.songs"."id",'user_id', "user.songs"."user_id")) end) "user.songs_json" from (song sub) "user.songs"  group by "user.songs"."user_id") "user.songs" on "user.songs"."user_id" = "user."."id"`, sql)
-	assert.Equal(t, []any{}, args)
-	assert.NoError(t, err)
+	snapshotQbAsync(t, &wg, qb().Select(User{}, "", "").LeftJoin("Songs", "", ""), file+"1.sql")
+	snapshotQbAsync(t, &wg, qb().Select(User{}, "", "").LeftJoin("Songs", "", "select * from user_song"), file+"2.sql")
 }
 
 func TestManyToOne(t *testing.T) {
