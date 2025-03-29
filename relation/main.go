@@ -125,8 +125,8 @@ func (r Relation) oneJoin() string {
 
 	for _, o := range r.One {
 		// this is reverse from many, theirs FK is ours
-		builder.WriteString(fmt.Sprintf("%s %s on %s = %s",
-			o.JoinType, o.from(), col(o.name(), o.PK), col(r.name(), o.FK)))
+		builder.WriteString(fmt.Sprintf("%s %s on %s",
+			o.JoinType, o.from(), o.onOneJoin(r)))
 
 		builder.WriteString(fmt.Sprintf(" %s %s", o.oneJoin(), o.manyJoin()))
 	}
@@ -134,12 +134,20 @@ func (r Relation) oneJoin() string {
 	return builder.String()
 }
 
+func (r Relation) onManyJoin(parent Relation) string {
+	return fmt.Sprintf("%s = %s", col(r.name(), r.FK), col(parent.name(), parent.PK))
+}
+
+func (r Relation) onOneJoin(parent Relation) string {
+	return fmt.Sprintf("%s = %s", col(r.name(), r.PK), col(parent.name(), parent.FK))
+}
+
 func (r Relation) manyJoin() string {
 	builder := strings.Builder{}
 
 	for _, m := range r.Many {
-		builder.WriteString(fmt.Sprintf(`%s (%s) %s on %s = %s`,
-			m.JoinType, m.Render(), col(m.name()), col(m.name(), m.FK), col(r.name(), r.PK)))
+		builder.WriteString(fmt.Sprintf("%s lateral (%s) %s on %s",
+			m.JoinType, m.Render(&r), col(m.name()), m.onManyJoin(r)))
 	}
 
 	return builder.String()
@@ -165,7 +173,7 @@ func (r Relation) from() string {
 	return from
 }
 
-func (r Relation) Render() string {
+func (r Relation) Render(parent *Relation) string {
 	builder := strings.Builder{}
 	builder.WriteString("select ")
 
@@ -173,7 +181,12 @@ func (r Relation) Render() string {
 		builder.WriteString(fmt.Sprintf("%s, ", col(r.name(), r.FK)))
 	}
 
-	builder.WriteString(fmt.Sprintf("%s from %s %s", r.jsonAgg(), r.from(), r.join()))
+	builder.WriteString(fmt.Sprintf("%s from %s ", r.jsonAgg(), r.from()))
+	builder.WriteString(r.join())
+
+	if parent != nil {
+		builder.WriteString(fmt.Sprintf("where %s", r.onManyJoin(*parent)))
+	}
 
 	if r.FK != "" {
 		builder.WriteString(fmt.Sprintf(" group by %s", col(r.name(), r.FK)))

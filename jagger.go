@@ -278,7 +278,7 @@ func (qb *QueryBuilder) ToSql() (string, []any, error) {
 		return "", nil, err
 	}
 
-	return rel.Render(), args, nil
+	return rel.Render(nil), args, nil
 }
 
 // calls .ToSql and panics if error
