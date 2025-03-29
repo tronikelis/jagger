@@ -139,7 +139,7 @@ func (r Relation) onManyJoin(parent Relation) string {
 }
 
 func (r Relation) onOneJoin(parent Relation) string {
-	return fmt.Sprintf("%s = %s", col(r.name(), r.PK), col(parent.name(), parent.FK))
+	return fmt.Sprintf("%s = %s", col(r.name(), r.PK), col(parent.name(), r.FK))
 }
 
 func (r Relation) manyJoin() string {
