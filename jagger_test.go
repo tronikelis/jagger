@@ -1,6 +1,7 @@
 package jagger_test
 
 import (
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -87,7 +88,7 @@ func cmd(stdin string, name string, args ...string) (string, error) {
 
 	go func() {
 		read, err := io.ReadAll(stdoutPipe)
-		if err != nil {
+		if err != nil && !errors.Is(err, os.ErrClosed) {
 			stdoutErrChan <- err
 			return
 		}
