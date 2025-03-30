@@ -7,11 +7,21 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: npm i
+        run: npm i
+
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.23.x'
+
       - name: install
         run: go get .
+
       - name: test
         run: go test
