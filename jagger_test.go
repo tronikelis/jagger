@@ -35,13 +35,18 @@ func snapshotQb(t *testing.T, qb *jagger.QueryBuilder, file string) {
 		return
 	}
 
-	oldSqlBytes, err := os.ReadFile(file)
+	oldSqlFile, err := os.OpenFile(file, os.O_CREATE|os.O_RDONLY, 0o644)
+	if err != nil {
+		panic(err)
+	}
+	defer oldSqlFile.Close()
+
+	oldSqlBytes, err := io.ReadAll(oldSqlFile)
 	if err != nil {
 		panic(err)
 	}
 
-	oldSql := string(oldSqlBytes)
-	assert.Equal(t, oldSql, newSql)
+	assert.Equal(t, string(oldSqlBytes), newSql)
 }
 
 func cmd(stdin string, name string, args ...string) (string, error) {
@@ -135,6 +140,8 @@ func qb() *jagger.QueryBuilder {
 const TEST_SQL_BASE = "tests/sql"
 
 func TestSimpleQuery(t *testing.T) {
+	t.Parallel()
+
 	file := TEST_SQL_BASE + "/test_simple_query"
 	wg := sync.WaitGroup{}
 	defer wg.Wait()
@@ -144,6 +151,8 @@ func TestSimpleQuery(t *testing.T) {
 }
 
 func TestOneToMany(t *testing.T) {
+	t.Parallel()
+
 	file := TEST_SQL_BASE + "/test_one_to_many"
 	wg := sync.WaitGroup{}
 	defer wg.Wait()
@@ -153,57 +162,58 @@ func TestOneToMany(t *testing.T) {
 }
 
 func TestManyToOne(t *testing.T) {
-	sql, args, err := qb().
-		Select(UserSong{}, "", "").
-		LeftJoin("User", "", "").
-		ToSql()
+	t.Parallel()
 
-	assert.Equal(t, `select json_agg(case when "user_song."."id" is null then null else json_strip_nulls(json_build_object('id', "user_song."."id",'user_id', "user_song."."user_id",'user', case when "user_song.user"."id" is null then null else json_strip_nulls(json_build_object('id', "user_song.user"."id")) end)) end) "user_song._json" from "user_song" as "user_song." left join "user" as "user_song.user" on "user_song.user"."id" = "user_song."."user_id"  `, sql)
-	assert.Equal(t, []any{}, args)
-	assert.NoError(t, err)
+	file := TEST_SQL_BASE + "/test_many_to_one"
+	wg := sync.WaitGroup{}
+	defer wg.Wait()
+
+	snapshotQbAsync(t, &wg, qb().Select(UserSong{}, "", "").LeftJoin("User", "", ""), file+"1.sql")
 }
 
 func TestManyToOneSubQuery(t *testing.T) {
-	sql, args, err := qb().
-		Select(UserSong{}, "", "").
-		LeftJoin("User", "", "select * from users").
-		ToSql()
+	t.Parallel()
 
-	assert.Equal(t, `select json_agg(case when "user_song."."id" is null then null else json_strip_nulls(json_build_object('id', "user_song."."id",'user_id', "user_song."."user_id",'user', case when "user_song.user"."id" is null then null else json_strip_nulls(json_build_object('id', "user_song.user"."id")) end)) end) "user_song._json" from "user_song" as "user_song." left join (select * from users) "user_song.user" on "user_song.user"."id" = "user_song."."user_id"  `, sql)
-	assert.Equal(t, []any{}, args)
-	assert.NoError(t, err)
+	file := TEST_SQL_BASE + "/test_many_to_one_subquery"
+	wg := sync.WaitGroup{}
+	defer wg.Wait()
+
+	snapshotQbAsync(t, &wg, qb().Select(UserSong{}, "", "").LeftJoin("User", "", "select * from users"), file+"1.sql")
 }
 
 func TestMultipleRelations(t *testing.T) {
-	sql, args, err := qb().
-		Select(User{}, "", "").
-		LeftJoin("Songs.User", "", "").
-		LeftJoin("Songs.Tracks", "", "").
-		ToSql()
+	t.Parallel()
 
-	assert.NoError(t, err)
-	assert.Equal(t, []any{}, args)
-	assert.Equal(t, `select json_agg(case when "user."."id" is null then null else json_strip_nulls(json_build_object('id', "user."."id",'songs', "user.songs_json")) end) "user._json" from "user" as "user." left join (select "user.songs"."user_id", json_agg(case when "user.songs"."id" is null then null else json_strip_nulls(json_build_object('id', "user.songs"."id",'user_id', "user.songs"."user_id",'user', case when "user_song.user"."id" is null then null else json_strip_nulls(json_build_object('id', "user_song.user"."id")) end,'tracks', "user_song.tracks_json")) end) "user.songs_json" from "user_song" as "user.songs" left join "user" as "user_song.user" on "user_song.user"."id" = "user.songs"."user_id"  left join (select "user_song.tracks"."song_id", json_agg(case when "user_song.tracks"."id" is null then null else json_strip_nulls(json_build_object('id', "user_song.tracks"."id",'song_id', "user_song.tracks"."song_id")) end) "user_song.tracks_json" from "song_track" as "user_song.tracks"  group by "user_song.tracks"."song_id") "user_song.tracks" on "user_song.tracks"."song_id" = "user.songs"."id" group by "user.songs"."user_id") "user.songs" on "user.songs"."user_id" = "user."."id"`, sql)
+	file := TEST_SQL_BASE + "/test_multiple_relations"
+	wg := sync.WaitGroup{}
+	defer wg.Wait()
+
+	snapshotQbAsync(t, &wg, qb().Select(User{}, "", "").LeftJoin("Songs.User", "", "").LeftJoin("Songs.Tracks", "", ""), file+"1.sql")
 }
 
 func TestBoth(t *testing.T) {
-	sql, args, err := qb().
+	t.Parallel()
+
+	file := TEST_SQL_BASE + "/test_both"
+	wg := sync.WaitGroup{}
+	defer wg.Wait()
+
+	snapshotQbAsync(t, &wg, qb().
 		Select(User{}, "", "").
 		LeftJoin("Songs", "", "").
-		LeftJoin("Songs.Tracks", "", "").
-		ToSql()
-
-	assert.Equal(t, `select json_agg(case when "user."."id" is null then null else json_strip_nulls(json_build_object('id', "user."."id",'songs', "user.songs_json")) end) "user._json" from "user" as "user." left join (select "user.songs"."user_id", json_agg(case when "user.songs"."id" is null then null else json_strip_nulls(json_build_object('id', "user.songs"."id",'user_id', "user.songs"."user_id",'tracks', "user_song.tracks_json")) end) "user.songs_json" from "user_song" as "user.songs" left join (select "user_song.tracks"."song_id", json_agg(case when "user_song.tracks"."id" is null then null else json_strip_nulls(json_build_object('id', "user_song.tracks"."id",'song_id', "user_song.tracks"."song_id")) end) "user_song.tracks_json" from "song_track" as "user_song.tracks"  group by "user_song.tracks"."song_id") "user_song.tracks" on "user_song.tracks"."song_id" = "user.songs"."id" group by "user.songs"."user_id") "user.songs" on "user.songs"."user_id" = "user."."id"`, sql)
-	assert.Equal(t, []any{}, args)
-	assert.NoError(t, err)
+		LeftJoin("Songs.Tracks", "", ""), file+"1.sql")
 }
 
 func TestJoinsMustBeValid(t *testing.T) {
+	t.Parallel()
+
 	_, _, err := qb().Select(User{}, "", "").LeftJoin("foo", "", "").ToSql()
 	assert.Error(t, err)
 }
 
 func TestCorrectArgOrder(t *testing.T) {
+	t.Parallel()
+
 	_, args, err := qb().Select(User{}, "", "", 1, 2).LeftJoin("Songs.Tracks", "", "select * from tracks", 3, 4).LeftJoin("Songs", "", "select * from songs", 5, 6).ToSql()
 	assert.NoError(t, err)
 	// user -> user song -> song track
@@ -218,12 +228,18 @@ type UserWithSpace struct {
 }
 
 func TestQuotes(t *testing.T) {
-	sql, _, _ := qb().Select(UserWithSpace{}, "", "").LeftJoin("Song", "", "").ToSql()
+	t.Parallel()
 
-	assert.Equal(t, `select json_agg(case when "user with space."."id with space" is null then null else json_strip_nulls(json_build_object('id with space', "user with space."."id with space",'song with space', case when "user with space.song with space"."id" is null then null else json_strip_nulls(json_build_object('id', "user with space.song with space"."id",'user_id', "user with space.song with space"."user_id")) end)) end) "user with space._json" from "user with space" as "user with space." left join "user_song" as "user with space.song with space" on "user with space.song with space"."id" = "user with space."."song id"  `, sql)
+	file := TEST_SQL_BASE + "/test_quotes"
+	wg := sync.WaitGroup{}
+	defer wg.Wait()
+
+	snapshotQbAsync(t, &wg, qb().Select(UserWithSpace{}, "", "").LeftJoin("Song", "", ""), file+"1.sql")
 }
 
 func TestClone(t *testing.T) {
+	t.Parallel()
+
 	q := qb()
 	qClone := q.Clone()
 
@@ -235,38 +251,46 @@ func TestClone(t *testing.T) {
 }
 
 func TestIncrementsArguments(t *testing.T) {
-	sql, _, err := qb().
+	t.Parallel()
+
+	file := TEST_SQL_BASE + "/test_increments_arguments"
+	wg := sync.WaitGroup{}
+	defer wg.Wait()
+
+	snapshotQbAsync(t, &wg, qb().
 		Select(User{}, "", "$1", 11).
 		LeftJoin("Songs", "", "$1 \"$3\" $2 ' '' $2'", 22, 33).
-		LeftJoin("Songs.Tracks", "", "$1 $2 ' $3 ' ($3)", 1, 2).
-		ToSql()
-
-	assert.NoError(t, err)
-	assert.Equal(t, `select json_agg(case when "user."."id" is null then null else json_strip_nulls(json_build_object('id', "user."."id",'songs', "user.songs_json")) end) "user._json" from ($1) "user." left join (select "user.songs"."user_id", json_agg(case when "user.songs"."id" is null then null else json_strip_nulls(json_build_object('id', "user.songs"."id",'user_id', "user.songs"."user_id",'tracks', "user_song.tracks_json")) end) "user.songs_json" from ($2 "$3" $3 ' '' $2') "user.songs" left join (select "user_song.tracks"."song_id", json_agg(case when "user_song.tracks"."id" is null then null else json_strip_nulls(json_build_object('id', "user_song.tracks"."id",'song_id', "user_song.tracks"."song_id")) end) "user_song.tracks_json" from ($4 $5 ' $3 ' ($6)) "user_song.tracks"  group by "user_song.tracks"."song_id") "user_song.tracks" on "user_song.tracks"."song_id" = "user.songs"."id" group by "user.songs"."user_id") "user.songs" on "user.songs"."user_id" = "user."."id"`, sql)
+		LeftJoin("Songs.Tracks", "", "$1 $2 ' $3 ' ($3)", 1, 2), file+"1.sql")
 }
 
 func TestMustSql(t *testing.T) {
+	t.Parallel()
+
 	assert.Panics(t, func() {
 		qb().MustSql()
 	})
 }
 
 func TestJsonAggParams(t *testing.T) {
-	sql, _, _ := qb().
-		Select(User{}, "order by id", "").
-		ToSql()
+	t.Parallel()
 
-	assert.Equal(t, `select json_agg(case when "user."."id" is null then null else json_strip_nulls(json_build_object('id', "user."."id")) end order by id) "user._json" from "user" as "user." `, sql)
+	file := TEST_SQL_BASE + "/test_json_agg_params"
+	wg := sync.WaitGroup{}
+	defer wg.Wait()
+
+	snapshotQbAsync(t, &wg, qb().Select(User{}, "order by id", ""), file+"1.sql")
 }
 
 func TestPassPointerTable(t *testing.T) {
-	sql, _, err := qb().
-		Select(&User{}, "", "").
-		LeftJoin("Songs", "", "").
-		ToSql()
+	t.Parallel()
 
-	assert.NoError(t, err)
-	assert.NotEmpty(t, sql)
+	file := TEST_SQL_BASE + "/test_pass_pointer_table"
+	wg := sync.WaitGroup{}
+	defer wg.Wait()
+
+	snapshotQbAsync(t, &wg, qb().
+		Select(&User{}, "", "").
+		LeftJoin("Songs", "", ""), file+"1.sql")
 }
 
 type SomeFieldBar struct {
@@ -280,12 +304,15 @@ type EmbeddedUser struct {
 }
 
 func TestEmbedded(t *testing.T) {
-	sql, _ := qb().
-		Select(EmbeddedUser{}, "", "select *, foo, bar from user").
-		LeftJoin("Songs", "", "").
-		MustSql()
+	t.Parallel()
 
-	assert.Equal(t, `select json_agg(case when "user."."id" is null then null else json_strip_nulls(json_build_object('id', "user."."id",'bar', "user."."bar",'foo', "user."."foo",'songs', "user.songs_json")) end) "user._json" from (select *, foo, bar from user) "user." left join (select "user.songs"."user_id", json_agg(case when "user.songs"."id" is null then null else json_strip_nulls(json_build_object('id', "user.songs"."id",'user_id', "user.songs"."user_id")) end) "user.songs_json" from "user_song" as "user.songs"  group by "user.songs"."user_id") "user.songs" on "user.songs"."user_id" = "user."."id"`, sql)
+	file := TEST_SQL_BASE + "/test_embedded"
+	wg := sync.WaitGroup{}
+	defer wg.Wait()
+
+	snapshotQbAsync(t, &wg, qb().
+		Select(EmbeddedUser{}, "", "select *, foo, bar from user").
+		LeftJoin("Songs", "", ""), file+"1.sql")
 }
 
 type EmptyPk struct {
@@ -295,9 +322,12 @@ type EmptyPk struct {
 }
 
 func TestEmptyPkSkipsCaseWhen(t *testing.T) {
-	sql, _ := qb().
-		Select(EmptyPk{}, "", "").
-		MustSql()
+	t.Parallel()
 
-	assert.Equal(t, `select json_agg(json_strip_nulls(json_build_object('id', "ttt."."id"))) "ttt._json" from "ttt" as "ttt." `, sql)
+	file := TEST_SQL_BASE + "/test_empty_pk_skips_case_when"
+	wg := sync.WaitGroup{}
+	defer wg.Wait()
+
+	snapshotQbAsync(t, &wg, qb().
+		Select(EmptyPk{}, "", ""), file+"1.sql")
 }
