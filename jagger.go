@@ -16,11 +16,12 @@ type BaseTable struct{}
 
 type (
 	JoinType = relation.JoinType
+	SubQuery = relation.SubQuery
 )
 
 type joinParams struct {
 	joinType JoinType
-	subQuery string
+	subQuery SubQuery
 	args     []any
 }
 
@@ -139,17 +140,12 @@ func newTable(typ reflect.Type) (table, error) {
 }
 
 func toRelation(table table, joinTree *joinTree, args *[]any) (relation.Relation, error) {
-	subQuery, err := toIncrementedArgsQuery(joinTree.params.subQuery, len(*args))
-	if err != nil {
-		return relation.Relation{}, err
-	}
-
 	currentRel := relation.Relation{
 		JoinType: joinTree.params.joinType,
 		Table:    table.name,
-		SubQuery: subQuery,
 	}
 
+	incrementSubQueryBy := len(*args)
 	*args = append(*args, joinTree.params.args...)
 
 	for _, f := range table.fields {
@@ -198,8 +194,42 @@ func toRelation(table table, joinTree *joinTree, args *[]any) (relation.Relation
 
 		switch fType.Kind() {
 		case reflect.Slice:
+			var (
+				subQuery string
+				err      error
+			)
+			if child.params.subQuery != nil {
+				subQuery, err = child.params.subQuery(rel.OnManyJoin(currentRel))
+				if err != nil {
+					return relation.Relation{}, err
+				}
+
+				subQuery, err = toIncrementedArgsQuery(subQuery, incrementSubQueryBy)
+				if err != nil {
+					return relation.Relation{}, err
+				}
+			}
+
+			rel.SubQuery = subQuery
 			currentRel.Many = append(currentRel.Many, rel)
 		case reflect.Struct:
+			var (
+				subQuery string
+				err      error
+			)
+			if child.params.subQuery != nil {
+				subQuery, err = child.params.subQuery(rel.OnOneJoin(currentRel))
+				if err != nil {
+					return relation.Relation{}, err
+				}
+
+				subQuery, err = toIncrementedArgsQuery(subQuery, incrementSubQueryBy)
+				if err != nil {
+					return relation.Relation{}, err
+				}
+			}
+
+			rel.SubQuery = subQuery
 			currentRel.One = append(currentRel.One, rel)
 		default:
 			return relation.Relation{}, fmt.Errorf("Cant join %s type", fType.String())
@@ -293,7 +323,7 @@ func NewQueryBuilder() *QueryBuilder {
 	return &QueryBuilder{joins: map[string]joinParams{}}
 }
 
-func (qb *QueryBuilder) Select(table any, subQuery string, args ...any) *QueryBuilder {
+func (qb *QueryBuilder) Select(table any, subQuery SubQuery, args ...any) *QueryBuilder {
 	qb.target = table
 	qb.params = joinParams{
 		subQuery: subQuery,
@@ -303,7 +333,7 @@ func (qb *QueryBuilder) Select(table any, subQuery string, args ...any) *QueryBu
 	return qb
 }
 
-func (qb *QueryBuilder) Join(joinType JoinType, path string, subQuery string, args ...any) *QueryBuilder {
+func (qb *QueryBuilder) Join(joinType JoinType, path string, subQuery SubQuery, args ...any) *QueryBuilder {
 	qb.joins[path] = joinParams{
 		joinType: joinType,
 		subQuery: subQuery,
@@ -313,19 +343,19 @@ func (qb *QueryBuilder) Join(joinType JoinType, path string, subQuery string, ar
 	return qb
 }
 
-func (qb *QueryBuilder) LeftJoin(path string, subQuery string, args ...any) *QueryBuilder {
+func (qb *QueryBuilder) LeftJoin(path string, subQuery SubQuery, args ...any) *QueryBuilder {
 	return qb.Join(relation.LEFT_JOIN, path, subQuery, args...)
 }
 
-func (qb *QueryBuilder) RightJoin(path string, subQuery string, args ...any) *QueryBuilder {
+func (qb *QueryBuilder) RightJoin(path string, subQuery SubQuery, args ...any) *QueryBuilder {
 	return qb.Join(relation.RIGHT_JOIN, path, subQuery, args...)
 }
 
-func (qb *QueryBuilder) InnerJoin(path string, subQuery string, args ...any) *QueryBuilder {
+func (qb *QueryBuilder) InnerJoin(path string, subQuery SubQuery, args ...any) *QueryBuilder {
 	return qb.Join(relation.INNER_JOIN, path, subQuery, args...)
 }
 
-func (qb *QueryBuilder) FullOuterJoin(path string, subQuery string, args ...any) *QueryBuilder {
+func (qb *QueryBuilder) FullOuterJoin(path string, subQuery SubQuery, args ...any) *QueryBuilder {
 	return qb.Join(relation.FULL_OUTER_JOIN, path, subQuery, args...)
 }
 
