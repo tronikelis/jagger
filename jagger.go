@@ -139,10 +139,21 @@ func newTable(typ reflect.Type) (table, error) {
 	return t, nil
 }
 
-func toRelation(table table, joinTree *joinTree, args *[]any) (relation.Relation, error) {
+func toRelation(table table, joinTree *joinTree, args *[]any, root bool) (relation.Relation, error) {
+	var subQuery string
+	if root && joinTree.params.subQuery != nil {
+		var err error
+
+		subQuery, err = joinTree.params.subQuery("")
+		if err != nil {
+			return relation.Relation{}, err
+		}
+	}
+
 	currentRel := relation.Relation{
 		JoinType: joinTree.params.joinType,
 		Table:    table.name,
+		SubQuery: subQuery,
 	}
 
 	incrementSubQueryBy := len(*args)
@@ -175,7 +186,7 @@ func toRelation(table table, joinTree *joinTree, args *[]any) (relation.Relation
 			return relation.Relation{}, err
 		}
 
-		rel, err := toRelation(t, child, args)
+		rel, err := toRelation(t, child, args, false)
 		if err != nil {
 			return relation.Relation{}, err
 		}
@@ -301,7 +312,7 @@ func (qb *QueryBuilder) ToSql() (string, []any, error) {
 		return "", nil, err
 	}
 
-	rel, err := toRelation(table, newJoinTree(qb.params, qb.joins), &args)
+	rel, err := toRelation(table, newJoinTree(qb.params, qb.joins), &args, true)
 	if err != nil {
 		return "", nil, err
 	}
