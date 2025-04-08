@@ -6,6 +6,8 @@ select
         json_build_object('id', "user."."id", 'songs', "user.songs_json")
       )
     end
+    order by
+      "user."."jagger_rn"
   ) "user._json"
 from
   ($1) "user."
@@ -26,6 +28,8 @@ from
             )
           )
         end
+        order by
+          "user.songs"."jagger_rn"
       ) "user.songs_json"
     from
       ($2 "$3" $3 ' '' $2') "user.songs"
@@ -44,6 +48,8 @@ from
                 )
               )
             end
+            order by
+              "user_song.tracks"."jagger_rn"
           ) "user_song.tracks_json"
         from
           ($4 $5 ' $3 ' ($6)) "user_song.tracks"

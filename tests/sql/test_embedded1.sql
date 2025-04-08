@@ -15,6 +15,8 @@ select
         )
       )
     end
+    order by
+      "user."."jagger_rn"
   ) "user._json"
 from
   (
@@ -40,9 +42,17 @@ from
             )
           )
         end
+        order by
+          "user.songs"."jagger_rn"
       ) "user.songs_json"
     from
-      "user_song" as "user.songs"
+      (
+        select
+          *,
+          row_number() over () as jagger_rn
+        from
+          "user_song"
+      ) "user.songs"
     where
       "user.songs"."user_id" = "user."."id"
     group by

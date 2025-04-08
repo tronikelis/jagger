@@ -16,7 +16,21 @@ select
         )
       )
     end
+    order by
+      "user_song."."jagger_rn"
   ) "user_song._json"
 from
-  "user_song" as "user_song."
-  left join "user" as "user_song.user" on "user_song.user"."id" = "user_song."."user_id"
+  (
+    select
+      *,
+      row_number() over () as jagger_rn
+    from
+      "user_song"
+  ) "user_song."
+  left join (
+    select
+      *,
+      row_number() over () as jagger_rn
+    from
+      "user"
+  ) "user_song.user" on "user_song.user"."id" = "user_song."."user_id"

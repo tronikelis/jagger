@@ -19,10 +19,9 @@ type (
 )
 
 type joinParams struct {
-	joinType      JoinType
-	subQuery      string
-	jsonAggParams string
-	args          []any
+	joinType JoinType
+	subQuery string
+	args     []any
 }
 
 type joinTree struct {
@@ -146,10 +145,9 @@ func toRelation(table table, joinTree *joinTree, args *[]any) (relation.Relation
 	}
 
 	currentRel := relation.Relation{
-		JoinType:      joinTree.params.joinType,
-		JsonAggParams: joinTree.params.jsonAggParams,
-		Table:         table.name,
-		SubQuery:      subQuery,
+		JoinType: joinTree.params.joinType,
+		Table:    table.name,
+		SubQuery: subQuery,
 	}
 
 	*args = append(*args, joinTree.params.args...)
@@ -295,42 +293,40 @@ func NewQueryBuilder() *QueryBuilder {
 	return &QueryBuilder{joins: map[string]joinParams{}}
 }
 
-func (qb *QueryBuilder) Select(table any, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
+func (qb *QueryBuilder) Select(table any, subQuery string, args ...any) *QueryBuilder {
 	qb.target = table
 	qb.params = joinParams{
-		jsonAggParams: jsonAggParams,
-		subQuery:      subQuery,
-		args:          args,
+		subQuery: subQuery,
+		args:     args,
 	}
 
 	return qb
 }
 
-func (qb *QueryBuilder) Join(joinType JoinType, path string, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
+func (qb *QueryBuilder) Join(joinType JoinType, path string, subQuery string, args ...any) *QueryBuilder {
 	qb.joins[path] = joinParams{
-		joinType:      joinType,
-		subQuery:      subQuery,
-		args:          args,
-		jsonAggParams: jsonAggParams,
+		joinType: joinType,
+		subQuery: subQuery,
+		args:     args,
 	}
 
 	return qb
 }
 
-func (qb *QueryBuilder) LeftJoin(path string, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
-	return qb.Join(relation.LEFT_JOIN, path, jsonAggParams, subQuery, args...)
+func (qb *QueryBuilder) LeftJoin(path string, subQuery string, args ...any) *QueryBuilder {
+	return qb.Join(relation.LEFT_JOIN, path, subQuery, args...)
 }
 
-func (qb *QueryBuilder) RightJoin(path string, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
-	return qb.Join(relation.RIGHT_JOIN, path, jsonAggParams, subQuery, args...)
+func (qb *QueryBuilder) RightJoin(path string, subQuery string, args ...any) *QueryBuilder {
+	return qb.Join(relation.RIGHT_JOIN, path, subQuery, args...)
 }
 
-func (qb *QueryBuilder) InnerJoin(path string, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
-	return qb.Join(relation.INNER_JOIN, path, jsonAggParams, subQuery, args...)
+func (qb *QueryBuilder) InnerJoin(path string, subQuery string, args ...any) *QueryBuilder {
+	return qb.Join(relation.INNER_JOIN, path, subQuery, args...)
 }
 
-func (qb *QueryBuilder) FullOuterJoin(path string, jsonAggParams string, subQuery string, args ...any) *QueryBuilder {
-	return qb.Join(relation.FULL_OUTER_JOIN, path, jsonAggParams, subQuery, args...)
+func (qb *QueryBuilder) FullOuterJoin(path string, subQuery string, args ...any) *QueryBuilder {
+	return qb.Join(relation.FULL_OUTER_JOIN, path, subQuery, args...)
 }
 
 func (qb *QueryBuilder) Clone() *QueryBuilder {

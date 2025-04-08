@@ -5,7 +5,10 @@ select
       else json_strip_nulls(json_build_object('id', "user."."id"))
     end
     order by
-      id
+      "user."."jagger_rn"
   ) "user._json"
 from
-  "user" as "user."
+  (
+    order by
+      id
+  ) "user."

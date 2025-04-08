@@ -147,8 +147,8 @@ func TestSimpleQuery(t *testing.T) {
 	wg := sync.WaitGroup{}
 	defer wg.Wait()
 
-	snapshotQbAsync(t, &wg, qb().Select(User{}, "", ""), file+"1.sql")
-	snapshotQbAsync(t, &wg, qb().Select(User{}, "", "select * from users"), file+"2.sql")
+	snapshotQbAsync(t, &wg, qb().Select(User{}, ""), file+"1.sql")
+	snapshotQbAsync(t, &wg, qb().Select(User{}, "select * from users"), file+"2.sql")
 }
 
 func TestOneToMany(t *testing.T) {
@@ -158,8 +158,8 @@ func TestOneToMany(t *testing.T) {
 	wg := sync.WaitGroup{}
 	defer wg.Wait()
 
-	snapshotQbAsync(t, &wg, qb().Select(User{}, "", "").LeftJoin("Songs", "", ""), file+"1.sql")
-	snapshotQbAsync(t, &wg, qb().Select(User{}, "", "").LeftJoin("Songs", "", "select * from user_song"), file+"2.sql")
+	snapshotQbAsync(t, &wg, qb().Select(User{}, "").LeftJoin("Songs", "", ""), file+"1.sql")
+	snapshotQbAsync(t, &wg, qb().Select(User{}, "").LeftJoin("Songs", "", "select * from user_song"), file+"2.sql")
 }
 
 func TestManyToOne(t *testing.T) {
@@ -169,7 +169,7 @@ func TestManyToOne(t *testing.T) {
 	wg := sync.WaitGroup{}
 	defer wg.Wait()
 
-	snapshotQbAsync(t, &wg, qb().Select(UserSong{}, "", "").LeftJoin("User", "", ""), file+"1.sql")
+	snapshotQbAsync(t, &wg, qb().Select(UserSong{}, "").LeftJoin("User", "", ""), file+"1.sql")
 }
 
 func TestManyToOneSubQuery(t *testing.T) {
@@ -179,7 +179,7 @@ func TestManyToOneSubQuery(t *testing.T) {
 	wg := sync.WaitGroup{}
 	defer wg.Wait()
 
-	snapshotQbAsync(t, &wg, qb().Select(UserSong{}, "", "").LeftJoin("User", "", "select * from users"), file+"1.sql")
+	snapshotQbAsync(t, &wg, qb().Select(UserSong{}, "").LeftJoin("User", "", "select * from users"), file+"1.sql")
 }
 
 func TestMultipleRelations(t *testing.T) {
@@ -189,7 +189,7 @@ func TestMultipleRelations(t *testing.T) {
 	wg := sync.WaitGroup{}
 	defer wg.Wait()
 
-	snapshotQbAsync(t, &wg, qb().Select(User{}, "", "").LeftJoin("Songs.User", "", "").LeftJoin("Songs.Tracks", "", ""), file+"1.sql")
+	snapshotQbAsync(t, &wg, qb().Select(User{}, "").LeftJoin("Songs.User", "", "").LeftJoin("Songs.Tracks", "", ""), file+"1.sql")
 }
 
 func TestBoth(t *testing.T) {
@@ -200,22 +200,26 @@ func TestBoth(t *testing.T) {
 	defer wg.Wait()
 
 	snapshotQbAsync(t, &wg, qb().
-		Select(User{}, "", "").
-		LeftJoin("Songs", "", "").
-		LeftJoin("Songs.Tracks", "", ""), file+"1.sql")
+		Select(User{}, "").
+		LeftJoin("Songs", "").
+		LeftJoin("Songs.Tracks", ""), file+"1.sql")
 }
 
 func TestJoinsMustBeValid(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := qb().Select(User{}, "", "").LeftJoin("foo", "", "").ToSql()
+	_, _, err := qb().Select(User{}, "").LeftJoin("foo", "", "").ToSql()
 	assert.Error(t, err)
 }
 
 func TestCorrectArgOrder(t *testing.T) {
 	t.Parallel()
 
-	_, args, err := qb().Select(User{}, "", "", 1, 2).LeftJoin("Songs.Tracks", "", "select * from tracks", 3, 4).LeftJoin("Songs", "", "select * from songs", 5, 6).ToSql()
+	_, args, err := qb().
+		Select(User{}, "", 1, 2).
+		LeftJoin("Songs.Tracks", "select * from tracks", 3, 4).
+		LeftJoin("Songs", "select * from songs", 5, 6).
+		ToSql()
 	assert.NoError(t, err)
 	// user -> user song -> song track
 	assert.Equal(t, []any{1, 2, 5, 6, 3, 4}, args)
@@ -235,7 +239,7 @@ func TestQuotes(t *testing.T) {
 	wg := sync.WaitGroup{}
 	defer wg.Wait()
 
-	snapshotQbAsync(t, &wg, qb().Select(UserWithSpace{}, "", "").LeftJoin("Song", "", ""), file+"1.sql")
+	snapshotQbAsync(t, &wg, qb().Select(UserWithSpace{}, "").LeftJoin("Song", "", ""), file+"1.sql")
 }
 
 func TestClone(t *testing.T) {
@@ -244,7 +248,7 @@ func TestClone(t *testing.T) {
 	q := qb()
 	qClone := q.Clone()
 
-	qClone.Select(User{}, "", "").LeftJoin("Songs", "", "")
+	qClone.Select(User{}, "").LeftJoin("Songs", "", "")
 
 	// q does not have a select statement
 	_, _, err := q.ToSql()
@@ -259,9 +263,9 @@ func TestIncrementsArguments(t *testing.T) {
 	defer wg.Wait()
 
 	snapshotQbAsync(t, &wg, qb().
-		Select(User{}, "", "$1", 11).
-		LeftJoin("Songs", "", "$1 \"$3\" $2 ' '' $2'", 22, 33).
-		LeftJoin("Songs.Tracks", "", "$1 $2 ' $3 ' ($3)", 1, 2), file+"1.sql")
+		Select(User{}, "$1", 11).
+		LeftJoin("Songs", "$1 \"$3\" $2 ' '' $2'", 22, 33).
+		LeftJoin("Songs.Tracks", "$1 $2 ' $3 ' ($3)", 1, 2), file+"1.sql")
 }
 
 func TestMustSql(t *testing.T) {
@@ -279,7 +283,7 @@ func TestJsonAggParams(t *testing.T) {
 	wg := sync.WaitGroup{}
 	defer wg.Wait()
 
-	snapshotQbAsync(t, &wg, qb().Select(User{}, "order by id", ""), file+"1.sql")
+	snapshotQbAsync(t, &wg, qb().Select(User{}, "order by id"), file+"1.sql")
 }
 
 func TestPassPointerTable(t *testing.T) {
@@ -290,8 +294,8 @@ func TestPassPointerTable(t *testing.T) {
 	defer wg.Wait()
 
 	snapshotQbAsync(t, &wg, qb().
-		Select(&User{}, "", "").
-		LeftJoin("Songs", "", ""), file+"1.sql")
+		Select(&User{}, "").
+		LeftJoin("Songs", ""), file+"1.sql")
 }
 
 type SomeFieldBar struct {
@@ -312,8 +316,8 @@ func TestEmbedded(t *testing.T) {
 	defer wg.Wait()
 
 	snapshotQbAsync(t, &wg, qb().
-		Select(EmbeddedUser{}, "", "select *, foo, bar from user").
-		LeftJoin("Songs", "", ""), file+"1.sql")
+		Select(EmbeddedUser{}, "select *, foo, bar from user").
+		LeftJoin("Songs", ""), file+"1.sql")
 }
 
 type EmptyPk struct {
@@ -330,5 +334,5 @@ func TestEmptyPkSkipsCaseWhen(t *testing.T) {
 	defer wg.Wait()
 
 	snapshotQbAsync(t, &wg, qb().
-		Select(EmptyPk{}, "", ""), file+"1.sql")
+		Select(EmptyPk{}, ""), file+"1.sql")
 }

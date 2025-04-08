@@ -6,9 +6,17 @@ select
         json_build_object('id', "user."."id", 'songs', "user.songs_json")
       )
     end
+    order by
+      "user."."jagger_rn"
   ) "user._json"
 from
-  "user" as "user."
+  (
+    select
+      *,
+      row_number() over () as jagger_rn
+    from
+      "user"
+  ) "user."
   left join lateral (
     select
       "user.songs"."user_id",
@@ -31,10 +39,24 @@ from
             )
           )
         end
+        order by
+          "user.songs"."jagger_rn"
       ) "user.songs_json"
     from
-      "user_song" as "user.songs"
-      left join "user" as "user_song.user" on "user_song.user"."id" = "user.songs"."user_id"
+      (
+        select
+          *,
+          row_number() over () as jagger_rn
+        from
+          "user_song"
+      ) "user.songs"
+      left join (
+        select
+          *,
+          row_number() over () as jagger_rn
+        from
+          "user"
+      ) "user_song.user" on "user_song.user"."id" = "user.songs"."user_id"
       left join lateral (
         select
           "user_song.tracks"."song_id",
@@ -50,9 +72,17 @@ from
                 )
               )
             end
+            order by
+              "user_song.tracks"."jagger_rn"
           ) "user_song.tracks_json"
         from
-          "song_track" as "user_song.tracks"
+          (
+            select
+              *,
+              row_number() over () as jagger_rn
+            from
+              "song_track"
+          ) "user_song.tracks"
         where
           "user_song.tracks"."song_id" = "user.songs"."id"
         group by

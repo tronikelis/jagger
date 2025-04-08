@@ -43,9 +43,8 @@ type Relation struct {
 	// this can be empty, for example pivot tables
 	PK string
 
-	FK            string
-	JsonName      string
-	JsonAggParams string
+	FK       string
+	JsonName string
 
 	JoinType JoinType
 	SubQuery string
@@ -72,11 +71,7 @@ func (r Relation) jsonAgg() string {
 	builder := strings.Builder{}
 
 	builder.WriteString(fmt.Sprintf("json_agg(%s", r.jsonBuildObject()))
-	if r.JsonAggParams != "" {
-		builder.WriteString(fmt.Sprintf(" %s", r.JsonAggParams))
-	}
-
-	builder.WriteString(fmt.Sprintf(") %s", col(r.nameJson())))
+	builder.WriteString(fmt.Sprintf(" order by %s) %s", col(r.name(), "jagger_rn"), col(r.nameJson())))
 
 	return builder.String()
 }
@@ -163,14 +158,11 @@ func (r Relation) join() string {
 }
 
 func (r Relation) from() string {
-	from := ""
 	if r.SubQuery == "" {
-		from = fmt.Sprintf("%s as %s", col(r.Table), col(r.name()))
-	} else {
-		from = fmt.Sprintf("(%s) %s", r.SubQuery, col(r.name()))
+		r.SubQuery = fmt.Sprintf("select *, row_number() over () as jagger_rn from %s", col(r.Table))
 	}
 
-	return from
+	return fmt.Sprintf("(%s) %s", r.SubQuery, col(r.name()))
 }
 
 func (r Relation) Render(parent *Relation) string {
