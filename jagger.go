@@ -140,24 +140,23 @@ func newTable(typ reflect.Type) (table, error) {
 }
 
 func toRelation(table table, joinTree *joinTree, args *[]any, root bool) (relation.Relation, error) {
-	var subQuery string
-	if root && joinTree.params.subQuery != nil {
-		var err error
-
-		subQuery, err = joinTree.params.subQuery("")
-		if err != nil {
-			return relation.Relation{}, err
-		}
-	}
-
 	currentRel := relation.Relation{
 		JoinType: joinTree.params.joinType,
 		Table:    table.name,
-		SubQuery: subQuery,
 	}
 
-	incrementSubQueryBy := len(*args)
-	*args = append(*args, joinTree.params.args...)
+	if root {
+		*args = append(*args, joinTree.params.args...)
+
+		if joinTree.params.subQuery != nil {
+			subQuery, err := joinTree.params.subQuery("")
+			if err != nil {
+				return relation.Relation{}, err
+			}
+
+			currentRel.SubQuery = subQuery
+		}
+	}
 
 	for _, f := range table.fields {
 		tag := tags.NewJaggerTag(f.Tag)
@@ -185,6 +184,9 @@ func toRelation(table table, joinTree *joinTree, args *[]any, root bool) (relati
 		if err != nil {
 			return relation.Relation{}, err
 		}
+
+		incrementSubQueryBy := len(*args)
+		*args = append(*args, child.params.args...)
 
 		rel, err := toRelation(t, child, args, false)
 		if err != nil {
