@@ -210,7 +210,7 @@ func toRelation(table table, joinTree *joinTree, args *[]any, root bool) (relati
 				err      error
 			)
 			if child.params.subQuery != nil {
-				subQuery, err = child.params.subQuery(rel.OnManyJoin(currentRel))
+				subQuery, err = child.params.subQuery(rel.OnManyJoin(currentRel, rel.Table))
 				if err != nil {
 					return relation.Relation{}, err
 				}
@@ -229,7 +229,7 @@ func toRelation(table table, joinTree *joinTree, args *[]any, root bool) (relati
 				err      error
 			)
 			if child.params.subQuery != nil {
-				subQuery, err = child.params.subQuery(rel.OnOneJoin(currentRel))
+				subQuery, err = child.params.subQuery(rel.OnOneJoin(currentRel, rel.Table))
 				if err != nil {
 					return relation.Relation{}, err
 				}

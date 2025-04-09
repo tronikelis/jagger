@@ -10,7 +10,7 @@ select
       "user."."jagger_rn"
   ) "user._json"
 from
-  ($1) "user."
+  lateral ($1) "user."
   left join lateral (
     select
       "user.songs"."user_id",
@@ -32,7 +32,7 @@ from
           "user.songs"."jagger_rn"
       ) "user.songs_json"
     from
-      ($2 "$3" $3 ' '' $2') "user.songs"
+      lateral ($1 "$3" $2 ' '' $2') "user.songs"
       left join lateral (
         select
           "user_song.tracks"."song_id",
@@ -52,7 +52,7 @@ from
               "user_song.tracks"."jagger_rn"
           ) "user_song.tracks_json"
         from
-          ($4 $5 ' $3 ' ($6)) "user_song.tracks"
+          lateral ($2 $3 ' $3 ' ($4)) "user_song.tracks"
         where
           "user_song.tracks"."song_id" = "user.songs"."id"
         group by

@@ -8,10 +8,10 @@ select
       "user."."jagger_rn"
   ) "user._json"
 from
-  (
+  lateral (
     select
       *,
       row_number() over () as jagger_rn
     from
-      "user"
+      "user" as "user."
   ) "user."

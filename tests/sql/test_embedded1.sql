@@ -19,7 +19,7 @@ select
       "user."."jagger_rn"
   ) "user._json"
 from
-  (
+  lateral (
     select
       *,
       foo,
@@ -46,12 +46,14 @@ from
           "user.songs"."jagger_rn"
       ) "user.songs_json"
     from
-      (
+      lateral (
         select
           *,
           row_number() over () as jagger_rn
         from
-          "user_song"
+          "user_song" as "user.songs"
+        where
+          "user.songs"."user_id" = "user."."id"
       ) "user.songs"
     where
       "user.songs"."user_id" = "user."."id"

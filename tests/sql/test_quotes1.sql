@@ -25,17 +25,19 @@ select
       "user with space."."jagger_rn"
   ) "user with space._json"
 from
-  (
+  lateral (
     select
       *,
       row_number() over () as jagger_rn
     from
-      "user with space"
+      "user with space" as "user with space."
   ) "user with space."
-  left join (
+  left join lateral (
     select
       *,
       row_number() over () as jagger_rn
     from
-      "user_song"
+      "user_song" as "user with space.song with space"
+    where
+      "user with space.song with space"."id" = "user with space."."song id"
   ) "user with space.song with space" on "user with space.song with space"."id" = "user with space."."song id"
