@@ -5,10 +5,10 @@ select
       "ttt."."jagger_rn"
   ) "ttt._json"
 from
-  (
+  lateral (
     select
       *,
       row_number() over () as jagger_rn
     from
-      "ttt"
+      "ttt" as "ttt."
   ) "ttt."

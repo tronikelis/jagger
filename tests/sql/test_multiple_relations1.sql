@@ -10,12 +10,12 @@ select
       "user."."jagger_rn"
   ) "user._json"
 from
-  (
+  lateral (
     select
       *,
       row_number() over () as jagger_rn
     from
-      "user"
+      "user" as "user."
   ) "user."
   left join lateral (
     select
@@ -43,19 +43,23 @@ from
           "user.songs"."jagger_rn"
       ) "user.songs_json"
     from
-      (
+      lateral (
         select
           *,
           row_number() over () as jagger_rn
         from
-          "user_song"
+          "user_song" as "user.songs"
+        where
+          "user.songs"."user_id" = "user."."id"
       ) "user.songs"
-      left join (
+      left join lateral (
         select
           *,
           row_number() over () as jagger_rn
         from
-          "user"
+          "user" as "user_song.user"
+        where
+          "user_song.user"."id" = "user.songs"."user_id"
       ) "user_song.user" on "user_song.user"."id" = "user.songs"."user_id"
       left join lateral (
         select
@@ -76,12 +80,14 @@ from
               "user_song.tracks"."jagger_rn"
           ) "user_song.tracks_json"
         from
-          (
+          lateral (
             select
               *,
               row_number() over () as jagger_rn
             from
-              "song_track"
+              "song_track" as "user_song.tracks"
+            where
+              "user_song.tracks"."song_id" = "user.songs"."id"
           ) "user_song.tracks"
         where
           "user_song.tracks"."song_id" = "user.songs"."id"

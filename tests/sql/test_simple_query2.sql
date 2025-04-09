@@ -8,7 +8,7 @@ select
       "user."."jagger_rn"
   ) "user._json"
 from
-  (
+  lateral (
     select
       *
     from
