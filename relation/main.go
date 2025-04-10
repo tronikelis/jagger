@@ -121,15 +121,14 @@ func (r Relation) oneJoin(args *[]any) (string, error) {
 	builder := strings.Builder{}
 
 	for _, o := range r.One {
-		cond := o.onOneJoin(r)
-		from, err := o.from(cond, args)
+		from, err := o.from(o.onOneJoin(r, o.Table), args)
 		if err != nil {
 			return "", err
 		}
 
 		// this is reverse from many, theirs FK is ours
 		builder.WriteString(fmt.Sprintf("%s lateral %s on %s",
-			o.JoinType, from, cond))
+			o.JoinType, from, o.onOneJoin(r, o.name())))
 
 		one, err := o.oneJoin(args)
 		if err != nil {
@@ -147,12 +146,12 @@ func (r Relation) oneJoin(args *[]any) (string, error) {
 	return builder.String(), nil
 }
 
-func (r Relation) onManyJoin(parent Relation) string {
-	return fmt.Sprintf("%s = %s", col(r.name(), r.FK), col(parent.name(), parent.PK))
+func (r Relation) onManyJoin(parent Relation, name string) string {
+	return fmt.Sprintf("%s = %s", col(name, r.FK), col(parent.name(), parent.PK))
 }
 
-func (r Relation) onOneJoin(parent Relation) string {
-	return fmt.Sprintf("%s = %s", col(r.name(), r.PK), col(parent.name(), r.FK))
+func (r Relation) onOneJoin(parent Relation, name string) string {
+	return fmt.Sprintf("%s = %s", col(name, r.PK), col(parent.name(), r.FK))
 }
 
 func (r Relation) manyJoin(args *[]any) (string, error) {
@@ -165,7 +164,7 @@ func (r Relation) manyJoin(args *[]any) (string, error) {
 		}
 
 		builder.WriteString(fmt.Sprintf("%s lateral (%s) %s on %s",
-			m.JoinType, from, col(m.name()), m.onManyJoin(r)))
+			m.JoinType, from, col(m.name()), m.onManyJoin(r, m.name())))
 	}
 
 	return builder.String(), nil
@@ -192,7 +191,7 @@ func (r Relation) join(args *[]any) (string, error) {
 
 func (r Relation) from(cond string, args *[]any) (string, error) {
 	if r.SubQuery == nil {
-		subQuery := fmt.Sprintf("select *, row_number() over () as jagger_rn from %s as %s", col(r.Table), col(r.name()))
+		subQuery := fmt.Sprintf("select *, row_number() over () as jagger_rn from %s", col(r.Table))
 		if cond != "" {
 			subQuery += fmt.Sprintf(" where %s", cond)
 		}
@@ -226,9 +225,8 @@ func (r Relation) Render(parent *Relation, args *[]any) (string, error) {
 
 	var joinCond string
 	if parent != nil {
-		joinCond = r.onManyJoin(*parent)
+		joinCond = r.onManyJoin(*parent, r.Table)
 	}
-
 	from, err := r.from(joinCond, args)
 	if err != nil {
 		return "", err
@@ -244,7 +242,7 @@ func (r Relation) Render(parent *Relation, args *[]any) (string, error) {
 	builder.WriteString(join)
 
 	if parent != nil {
-		builder.WriteString(fmt.Sprintf("where %s", r.onManyJoin(*parent)))
+		builder.WriteString(fmt.Sprintf("where %s", r.onManyJoin(*parent, r.name())))
 	}
 
 	if r.FK != "" {

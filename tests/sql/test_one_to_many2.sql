@@ -15,7 +15,7 @@ from
       *,
       row_number() over () as jagger_rn
     from
-      "user" as "user."
+      "user"
   ) "user."
   left join lateral (
     select
@@ -43,7 +43,7 @@ from
         from
           songs
         where
-          "user.songs"."user_id" = "user."."id"
+          "user_song"."user_id" = "user."."id"
       ) "user.songs"
     where
       "user.songs"."user_id" = "user."."id"

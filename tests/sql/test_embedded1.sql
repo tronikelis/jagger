@@ -51,9 +51,9 @@ from
           *,
           row_number() over () as jagger_rn
         from
-          "user_song" as "user.songs"
+          "user_song"
         where
-          "user.songs"."user_id" = "user."."id"
+          "user_song"."user_id" = "user."."id"
       ) "user.songs"
     where
       "user.songs"."user_id" = "user."."id"

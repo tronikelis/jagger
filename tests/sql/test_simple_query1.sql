@@ -13,5 +13,5 @@ from
       *,
       row_number() over () as jagger_rn
     from
-      "user" as "user."
+      "user"
   ) "user."

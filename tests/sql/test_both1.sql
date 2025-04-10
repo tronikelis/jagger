@@ -15,7 +15,7 @@ from
       *,
       row_number() over () as jagger_rn
     from
-      "user" as "user."
+      "user"
   ) "user."
   left join lateral (
     select
@@ -43,9 +43,9 @@ from
           *,
           row_number() over () as jagger_rn
         from
-          "user_song" as "user.songs"
+          "user_song"
         where
-          "user.songs"."user_id" = "user."."id"
+          "user_song"."user_id" = "user."."id"
       ) "user.songs"
       left join lateral (
         select
@@ -71,9 +71,9 @@ from
               *,
               row_number() over () as jagger_rn
             from
-              "song_track" as "user_song.tracks"
+              "song_track"
             where
-              "user_song.tracks"."song_id" = "user.songs"."id"
+              "song_track"."song_id" = "user.songs"."id"
           ) "user_song.tracks"
         where
           "user_song.tracks"."song_id" = "user.songs"."id"

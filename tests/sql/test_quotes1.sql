@@ -30,14 +30,14 @@ from
       *,
       row_number() over () as jagger_rn
     from
-      "user with space" as "user with space."
+      "user with space"
   ) "user with space."
   left join lateral (
     select
       *,
       row_number() over () as jagger_rn
     from
-      "user_song" as "user with space.song with space"
+      "user_song"
     where
-      "user with space.song with space"."id" = "user with space."."song id"
+      "user_song"."id" = "user with space."."song id"
   ) "user with space.song with space" on "user with space.song with space"."id" = "user with space."."song id"
