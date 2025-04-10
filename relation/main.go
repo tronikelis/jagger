@@ -121,7 +121,7 @@ func (r Relation) oneJoin(args *[]any) (string, error) {
 	builder := strings.Builder{}
 
 	for _, o := range r.One {
-		cond := o.OnOneJoin(r, "")
+		cond := o.onOneJoin(r)
 		from, err := o.from(cond, args)
 		if err != nil {
 			return "", err
@@ -147,18 +147,12 @@ func (r Relation) oneJoin(args *[]any) (string, error) {
 	return builder.String(), nil
 }
 
-func (r Relation) OnManyJoin(parent Relation, name string) string {
-	if name == "" {
-		name = r.name()
-	}
-	return fmt.Sprintf("%s = %s", col(name, r.FK), col(parent.name(), parent.PK))
+func (r Relation) onManyJoin(parent Relation) string {
+	return fmt.Sprintf("%s = %s", col(r.name(), r.FK), col(parent.name(), parent.PK))
 }
 
-func (r Relation) OnOneJoin(parent Relation, name string) string {
-	if name == "" {
-		name = r.name()
-	}
-	return fmt.Sprintf("%s = %s", col(name, r.PK), col(parent.name(), r.FK))
+func (r Relation) onOneJoin(parent Relation) string {
+	return fmt.Sprintf("%s = %s", col(r.name(), r.PK), col(parent.name(), r.FK))
 }
 
 func (r Relation) manyJoin(args *[]any) (string, error) {
@@ -171,7 +165,7 @@ func (r Relation) manyJoin(args *[]any) (string, error) {
 		}
 
 		builder.WriteString(fmt.Sprintf("%s lateral (%s) %s on %s",
-			m.JoinType, from, col(m.name()), m.OnManyJoin(r, "")))
+			m.JoinType, from, col(m.name()), m.onManyJoin(r)))
 	}
 
 	return builder.String(), nil
@@ -232,7 +226,7 @@ func (r Relation) Render(parent *Relation, args *[]any) (string, error) {
 
 	var joinCond string
 	if parent != nil {
-		joinCond = r.OnManyJoin(*parent, "")
+		joinCond = r.onManyJoin(*parent)
 	}
 
 	from, err := r.from(joinCond, args)
@@ -250,7 +244,7 @@ func (r Relation) Render(parent *Relation, args *[]any) (string, error) {
 	builder.WriteString(join)
 
 	if parent != nil {
-		builder.WriteString(fmt.Sprintf("where %s", r.OnManyJoin(*parent, "")))
+		builder.WriteString(fmt.Sprintf("where %s", r.onManyJoin(*parent)))
 	}
 
 	if r.FK != "" {
