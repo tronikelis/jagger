@@ -149,7 +149,7 @@ func TestSimpleQuery(t *testing.T) {
 	defer wg.Wait()
 
 	snapshotQbAsync(t, &wg, qb().Select(User{}, nil), file+"1.sql")
-	snapshotQbAsync(t, &wg, qb().Select(User{}, func(cond string) (string, error) { return "select * from users", nil }), file+"2.sql")
+	snapshotQbAsync(t, &wg, qb().Select(User{}, func(cond string) (string, []any, error) { return "select * from users", nil, nil }), file+"2.sql")
 }
 
 func TestOneToMany(t *testing.T) {
@@ -165,8 +165,8 @@ func TestOneToMany(t *testing.T) {
 		&wg,
 		qb().
 			Select(User{}, nil).
-			LeftJoin("Songs", func(cond string) (string, error) {
-				return fmt.Sprintf("select *, row_number() over () as jagger_rn from songs where %s", cond), nil
+			LeftJoin("Songs", func(cond string) (string, []any, error) {
+				return fmt.Sprintf("select *, row_number() over () as jagger_rn from songs where %s", cond), nil, nil
 			}),
 		file+"2.sql",
 	)
@@ -193,8 +193,8 @@ func TestManyToOneSubQuery(t *testing.T) {
 		Select(UserSong{}, nil).
 		LeftJoin(
 			"User",
-			func(cond string) (string, error) {
-				return fmt.Sprintf("select * from user where %s", cond), nil
+			func(cond string) (string, []any, error) {
+				return fmt.Sprintf("select * from user where %s", cond), nil, nil
 			}),
 		file+"1.sql",
 	)
@@ -234,9 +234,13 @@ func TestCorrectArgOrder(t *testing.T) {
 	t.Parallel()
 
 	_, args, err := qb().
-		Select(User{}, nil, 1, 2).
-		LeftJoin("Songs.Tracks", func(cond string) (string, error) { return fmt.Sprintf("select * from tracks where %s", cond), nil }, 3, 4).
-		LeftJoin("Songs", func(cond string) (string, error) { return fmt.Sprintf("select * from songs where %s", cond), nil }, 5, 6).
+		Select(User{}, func(cond string) (string, []any, error) { return "", []any{1, 2}, nil }).
+		LeftJoin("Songs.Tracks", func(cond string) (string, []any, error) {
+			return fmt.Sprintf("select * from tracks where %s", cond), []any{3, 4}, nil
+		}).
+		LeftJoin("Songs", func(cond string) (string, []any, error) {
+			return fmt.Sprintf("select * from songs where %s", cond), []any{5, 6}, nil
+		}).
 		ToSql()
 	assert.NoError(t, err)
 	// user -> user song -> song track
@@ -281,9 +285,9 @@ func TestIncrementsArguments(t *testing.T) {
 	defer wg.Wait()
 
 	snapshotQbAsync(t, &wg, qb().
-		Select(User{}, func(cond string) (string, error) { return "$1", nil }, 11).
-		LeftJoin("Songs", func(cond string) (string, error) { return "$1 \"$3\" $2 ' '' $2'", nil }, 22, 33).
-		LeftJoin("Songs.Tracks", func(cond string) (string, error) { return "$1 $2 ' $3 ' ($3)", nil }, 1, 2), file+"1.sql")
+		Select(User{}, func(cond string) (string, []any, error) { return "$1", []any{11}, nil }).
+		LeftJoin("Songs", func(cond string) (string, []any, error) { return "$1 \"$3\" $2 ' '' $2'", []any{22, 33}, nil }).
+		LeftJoin("Songs.Tracks", func(cond string) (string, []any, error) { return "$1 $2 ' $3 ' ($3)", []any{1, 2}, nil }), file+"1.sql")
 }
 
 func TestMustSql(t *testing.T) {
@@ -324,8 +328,8 @@ func TestEmbedded(t *testing.T) {
 	defer wg.Wait()
 
 	snapshotQbAsync(t, &wg, qb().
-		Select(EmbeddedUser{}, func(cond string) (string, error) {
-			return "select *, foo, bar from user", nil
+		Select(EmbeddedUser{}, func(cond string) (string, []any, error) {
+			return "select *, foo, bar from user", nil, nil
 		}).
 		LeftJoin("Songs", nil), file+"1.sql")
 }

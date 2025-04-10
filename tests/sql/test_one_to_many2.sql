@@ -43,7 +43,7 @@ from
         from
           songs
         where
-          "user_song"."user_id" = "user."."id"
+          "user.songs"."user_id" = "user."."id"
       ) "user.songs"
     where
       "user.songs"."user_id" = "user."."id"

@@ -33,5 +33,5 @@ from
     from
       user
     where
-      "user"."id" = "user_song."."user_id"
+      "user_song.user"."id" = "user_song."."user_id"
   ) "user_song.user" on "user_song.user"."id" = "user_song."."user_id"

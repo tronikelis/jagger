@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
-	"strconv"
 	"strings"
-	"unicode"
 
 	"github.com/tronikelis/jagger/relation"
 	"github.com/tronikelis/jagger/tags"
@@ -22,7 +20,6 @@ type (
 type joinParams struct {
 	joinType JoinType
 	subQuery SubQuery
-	args     []any
 }
 
 type joinTree struct {
@@ -139,23 +136,11 @@ func newTable(typ reflect.Type) (table, error) {
 	return t, nil
 }
 
-func toRelation(table table, joinTree *joinTree, args *[]any, root bool) (relation.Relation, error) {
+func toRelation(table table, joinTree *joinTree) (relation.Relation, error) {
 	currentRel := relation.Relation{
+		SubQuery: joinTree.params.subQuery,
 		JoinType: joinTree.params.joinType,
 		Table:    table.name,
-	}
-
-	if root {
-		*args = append(*args, joinTree.params.args...)
-
-		if joinTree.params.subQuery != nil {
-			subQuery, err := joinTree.params.subQuery("")
-			if err != nil {
-				return relation.Relation{}, err
-			}
-
-			currentRel.SubQuery = subQuery
-		}
 	}
 
 	for _, f := range table.fields {
@@ -185,10 +170,7 @@ func toRelation(table table, joinTree *joinTree, args *[]any, root bool) (relati
 			return relation.Relation{}, err
 		}
 
-		incrementSubQueryBy := len(*args)
-		*args = append(*args, child.params.args...)
-
-		rel, err := toRelation(t, child, args, false)
+		rel, err := toRelation(t, child)
 		if err != nil {
 			return relation.Relation{}, err
 		}
@@ -207,42 +189,8 @@ func toRelation(table table, joinTree *joinTree, args *[]any, root bool) (relati
 
 		switch fType.Kind() {
 		case reflect.Slice:
-			var (
-				subQuery string
-				err      error
-			)
-			if child.params.subQuery != nil {
-				subQuery, err = child.params.subQuery(rel.OnManyJoin(currentRel, rel.Table))
-				if err != nil {
-					return relation.Relation{}, err
-				}
-
-				subQuery, err = toIncrementedArgsQuery(subQuery, incrementSubQueryBy)
-				if err != nil {
-					return relation.Relation{}, err
-				}
-			}
-
-			rel.SubQuery = subQuery
 			currentRel.Many = append(currentRel.Many, rel)
 		case reflect.Struct:
-			var (
-				subQuery string
-				err      error
-			)
-			if child.params.subQuery != nil {
-				subQuery, err = child.params.subQuery(rel.OnOneJoin(currentRel, rel.Table))
-				if err != nil {
-					return relation.Relation{}, err
-				}
-
-				subQuery, err = toIncrementedArgsQuery(subQuery, incrementSubQueryBy)
-				if err != nil {
-					return relation.Relation{}, err
-				}
-			}
-
-			rel.SubQuery = subQuery
 			currentRel.One = append(currentRel.One, rel)
 		default:
 			return relation.Relation{}, fmt.Errorf("Cant join %s type", fType.String())
@@ -252,59 +200,7 @@ func toRelation(table table, joinTree *joinTree, args *[]any, root bool) (relati
 	return currentRel, nil
 }
 
-func toIncrementedArgsQuery(query string, by int) (string, error) {
-	counts := struct {
-		quote  int
-		quotes int
-	}{}
-	runes := []rune(query)
-
-	builder := strings.Builder{}
-	acc := strings.Builder{}
-
-	for i := 0; i < len(runes); i++ {
-		builder.WriteRune(runes[i])
-
-		if runes[i] == '$' && counts.quote%2 == 0 && counts.quotes%2 == 0 {
-			acc.WriteString(builder.String())
-			builder.Reset()
-
-			for i+1 < len(runes) && unicode.IsDigit(runes[i+1]) {
-				i++
-				builder.WriteRune(runes[i])
-			}
-			if builder.Len() == 0 {
-				continue
-			}
-
-			num, err := strconv.Atoi(builder.String())
-			if err != nil {
-				return "", err
-			}
-			builder.Reset()
-
-			num += by
-
-			acc.WriteString(strconv.Itoa(num))
-			continue
-		}
-
-		switch runes[i] {
-		case '"':
-			counts.quotes++
-		case '\'':
-			counts.quote++
-		}
-	}
-
-	acc.WriteString(builder.String())
-
-	return acc.String(), nil
-}
-
 func (qb *QueryBuilder) ToSql() (string, []any, error) {
-	args := []any{}
-
 	if qb.target == nil {
 		return "", nil, fmt.Errorf("ToSql called without target")
 	}
@@ -314,12 +210,18 @@ func (qb *QueryBuilder) ToSql() (string, []any, error) {
 		return "", nil, err
 	}
 
-	rel, err := toRelation(table, newJoinTree(qb.params, qb.joins), &args, true)
+	rel, err := toRelation(table, newJoinTree(qb.params, qb.joins))
 	if err != nil {
 		return "", nil, err
 	}
 
-	return rel.Render(nil), args, nil
+	var args []any
+	rendered, err := rel.Render(nil, &args)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return rendered, args, nil
 }
 
 // calls .ToSql and panics if error
@@ -336,40 +238,38 @@ func NewQueryBuilder() *QueryBuilder {
 	return &QueryBuilder{joins: map[string]joinParams{}}
 }
 
-func (qb *QueryBuilder) Select(table any, subQuery SubQuery, args ...any) *QueryBuilder {
+func (qb *QueryBuilder) Select(table any, subQuery SubQuery) *QueryBuilder {
 	qb.target = table
 	qb.params = joinParams{
 		subQuery: subQuery,
-		args:     args,
 	}
 
 	return qb
 }
 
-func (qb *QueryBuilder) Join(joinType JoinType, path string, subQuery SubQuery, args ...any) *QueryBuilder {
+func (qb *QueryBuilder) Join(joinType JoinType, path string, subQuery SubQuery) *QueryBuilder {
 	qb.joins[path] = joinParams{
 		joinType: joinType,
 		subQuery: subQuery,
-		args:     args,
 	}
 
 	return qb
 }
 
-func (qb *QueryBuilder) LeftJoin(path string, subQuery SubQuery, args ...any) *QueryBuilder {
-	return qb.Join(relation.LEFT_JOIN, path, subQuery, args...)
+func (qb *QueryBuilder) LeftJoin(path string, subQuery SubQuery) *QueryBuilder {
+	return qb.Join(relation.LEFT_JOIN, path, subQuery)
 }
 
-func (qb *QueryBuilder) RightJoin(path string, subQuery SubQuery, args ...any) *QueryBuilder {
-	return qb.Join(relation.RIGHT_JOIN, path, subQuery, args...)
+func (qb *QueryBuilder) RightJoin(path string, subQuery SubQuery) *QueryBuilder {
+	return qb.Join(relation.RIGHT_JOIN, path, subQuery)
 }
 
-func (qb *QueryBuilder) InnerJoin(path string, subQuery SubQuery, args ...any) *QueryBuilder {
-	return qb.Join(relation.INNER_JOIN, path, subQuery, args...)
+func (qb *QueryBuilder) InnerJoin(path string, subQuery SubQuery) *QueryBuilder {
+	return qb.Join(relation.INNER_JOIN, path, subQuery)
 }
 
-func (qb *QueryBuilder) FullOuterJoin(path string, subQuery SubQuery, args ...any) *QueryBuilder {
-	return qb.Join(relation.FULL_OUTER_JOIN, path, subQuery, args...)
+func (qb *QueryBuilder) FullOuterJoin(path string, subQuery SubQuery) *QueryBuilder {
+	return qb.Join(relation.FULL_OUTER_JOIN, path, subQuery)
 }
 
 func (qb *QueryBuilder) Clone() *QueryBuilder {
