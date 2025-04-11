@@ -24,8 +24,8 @@ func main() {
     // User{} -> select initial struct from which to start the query
     //
     //
-    // SubQuery -> func(cond string) (string, error) --- DOES NOT APPLY TO INITIAL SELECT
-    // a function which returns the subquery from which to select,
+    // SubQuery -> func(cond string) (string, []any, error) --- DOES NOT APPLY TO INITIAL SELECT
+    // a function which returns the subquery and arguments for it from which to select,
     // optionally takes in a `cond` -> `table.pk = table.fk`
     // it is highly recommended to use the condition, this makes postgres use the indexes for scanning
     // because subqueries are computed seperately
@@ -34,9 +34,9 @@ func main() {
     // the subquery MUST return `jagger_rn` column which will be used for ordering,
     // this is a such strict requirement because postgres does not guarantee ordering for json_agg, or from items from inner subqueries
     // having undefined behavior in a db query tool is unacceptable
-    Select(User{}, func(cond string) (string, error) { return "select *, row_number() over () as jagger_rn from users", nil }).
+    Select(User{}, func(cond string) (string, []any, error) { return "select *, row_number() over () as jagger_rn from users", nil, nil }).
     // left join direct field
-    LeftJoin("Songs", func(cond string) (string, error) { return fmt.Sprintf("select *, row_number() over () as jagger_rn from songs where %s", cond), nil }).
+    LeftJoin("Songs", func(cond string) (string, []any, error) { return fmt.Sprintf("select *, row_number() over () as jagger_rn from songs where %s", cond), nil, nil }).
     // nested relations also supported
     LeftJoin("Songs.User", nil).
     ToSql()
