@@ -18,12 +18,27 @@ type Song struct {
 
 func main() {
   sql, args, err := jagger.NewQueryBuilder().
-    // Select initial struct, add json_agg suffix if desired, subquery which to select from (optional)
-    Select(User{}, "json_agg suffix", "select * from users").
+    // Arguments:
+    //
+    //
+    // User{} -> select initial struct from which to start the query
+    //
+    //
+    // SubQuery -> func(cond string) (string, []any, error) --- DOES NOT APPLY TO INITIAL SELECT
+    // a function which returns the subquery and arguments for it from which to select,
+    // optionally takes in a `cond` -> `table.pk = table.fk`
+    // it is highly recommended to use the condition, this makes postgres use the indexes for scanning
+    // because subqueries are computed seperately
+    // this is possible because all jagger joins are lateral
+    //
+    // the subquery MUST return `jagger_rn` column which will be used for ordering,
+    // this is a such strict requirement because postgres does not guarantee ordering for json_agg, or from items from inner subqueries
+    // having undefined behavior in a db query tool is unacceptable
+    Select(User{}, func(cond string) (string, []any, error) { return "select *, row_number() over () as jagger_rn from users", nil, nil }).
     // left join direct field
-    LeftJoin("Songs", "", "").
+    LeftJoin("Songs", func(cond string) (string, []any, error) { return fmt.Sprintf("select *, row_number() over () as jagger_rn from songs where %s", cond), nil, nil }).
     // nested relations also supported
-    LeftJoin("Songs.User", "", "").
+    LeftJoin("Songs.User", nil).
     ToSql()
 }
 ```
@@ -32,47 +47,54 @@ This turns your relation into expected json format when you call `.ToSql()` (jus
 
 ```sql
 select
-  json_agg (
+  json_agg(
     case
       when "user."."id" is null then null
-      else json_strip_nulls (
-        json_build_object ('id', "user."."id", 'songs', "user.songs_json")
+      else json_strip_nulls(
+        json_build_object('id', "user."."id", 'songs', "user.songs_json")
       )
     end
+    order by
+      "user."."jagger_rn"
   ) "user._json"
 from
-  "user" as "user."
-  left join (
+  lateral (
+    select
+      *,
+      row_number() over () as jagger_rn
+    from
+      "user" as "user."
+  ) "user."
+  left join lateral (
     select
       "user.songs"."user_id",
-      json_agg (
+      json_agg(
         case
           when "user.songs"."id" is null then null
-          else json_strip_nulls (
-            json_build_object (
+          else json_strip_nulls(
+            json_build_object(
               'id',
               "user.songs"."id",
               'user_id',
-              "user.songs"."user_id",
-              'user',
-              case
-                when "user_song.user"."id" is null then null
-                else json_strip_nulls (json_build_object ('id', "user_song.user"."id"))
-              end
+              "user.songs"."user_id"
             )
           )
         end
+        order by
+          "user.songs"."jagger_rn"
       ) "user.songs_json"
     from
-      "user_song" as "user.songs"
-      left join (
+      lateral (
         select
-          *
+          *,
+          row_number() over () as jagger_rn
         from
-          user_songs
+          "user_song" as "user.songs"
         where
-          id = ?
-      ) "user_song.user" on "user_song.user"."id" = "user.songs"."user_id"
+          "user.songs"."user_id" = "user."."id"
+      ) "user.songs"
+    where
+      "user.songs"."user_id" = "user."."id"
     group by
       "user.songs"."user_id"
   ) "user.songs" on "user.songs"."user_id" = "user."."id"
@@ -180,17 +202,6 @@ This package is responsible only for the json aggregation,
 this is why you should probably use another query builder tool with this tool
 
 The methods accept an optional sub query as the second parameter to get the table rows
-
-
-```go
-sql, args, err := jagger.NewQueryBuilder().
-  Select(User{}, "", "select * from users order by id desc", arg1, arg2).
-  // join Songs AND User, which in this case is unnecessary as we already have user from select
-  LeftJoin("Songs.User", "", "").
-  // Join User.Songs.Tracks
-  LeftJoin("Songs.Tracks", "", "").
-  ToSql()
-```
 
 The query builder is mutable, so select and join methods mutate, if you want to clone
 the current state, use `.Clone()` method, but beware that this will be a shallow clone

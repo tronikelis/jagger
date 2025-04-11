@@ -15,9 +15,11 @@ select
         )
       )
     end
+    order by
+      "user."."jagger_rn"
   ) "user._json"
 from
-  (
+  lateral (
     select
       *,
       foo,
@@ -40,9 +42,19 @@ from
             )
           )
         end
+        order by
+          "user.songs"."jagger_rn"
       ) "user.songs_json"
     from
-      "user_song" as "user.songs"
+      lateral (
+        select
+          *,
+          row_number() over () as jagger_rn
+        from
+          "user_song"
+        where
+          "user_song"."user_id" = "user."."id"
+      ) "user.songs"
     where
       "user.songs"."user_id" = "user."."id"
     group by

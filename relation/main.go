@@ -20,6 +20,8 @@ func col(cols ...string) string {
 	return builder.String()
 }
 
+type SubQuery = func(cond string) (string, []any, error)
+
 type JoinType string
 
 const (
@@ -43,12 +45,11 @@ type Relation struct {
 	// this can be empty, for example pivot tables
 	PK string
 
-	FK            string
-	JsonName      string
-	JsonAggParams string
+	FK       string
+	JsonName string
 
 	JoinType JoinType
-	SubQuery string
+	SubQuery SubQuery
 
 	Fields []Field
 	One    []Relation
@@ -72,11 +73,7 @@ func (r Relation) jsonAgg() string {
 	builder := strings.Builder{}
 
 	builder.WriteString(fmt.Sprintf("json_agg(%s", r.jsonBuildObject()))
-	if r.JsonAggParams != "" {
-		builder.WriteString(fmt.Sprintf(" %s", r.JsonAggParams))
-	}
-
-	builder.WriteString(fmt.Sprintf(") %s", col(r.nameJson())))
+	builder.WriteString(fmt.Sprintf(" order by %s) %s", col(r.name(), "jagger_rn"), col(r.nameJson())))
 
 	return builder.String()
 }
@@ -120,60 +117,105 @@ func (r Relation) jsonBuildObject() string {
 	return r.stripNulls(result)
 }
 
-func (r Relation) oneJoin() string {
+func (r Relation) oneJoin(args *[]any) (string, error) {
 	builder := strings.Builder{}
 
 	for _, o := range r.One {
-		// this is reverse from many, theirs FK is ours
-		builder.WriteString(fmt.Sprintf("%s %s on %s",
-			o.JoinType, o.from(), o.onOneJoin(r)))
+		from, err := o.from(o.onOneJoin(r, o.Table), args)
+		if err != nil {
+			return "", err
+		}
 
-		builder.WriteString(fmt.Sprintf(" %s %s", o.oneJoin(), o.manyJoin()))
+		// this is reverse from many, theirs FK is ours
+		builder.WriteString(fmt.Sprintf("%s lateral %s on %s",
+			o.JoinType, from, o.onOneJoin(r, o.name())))
+
+		one, err := o.oneJoin(args)
+		if err != nil {
+			return "", err
+		}
+
+		many, err := o.manyJoin(args)
+		if err != nil {
+			return "", err
+		}
+
+		builder.WriteString(fmt.Sprintf(" %s %s", one, many))
 	}
 
-	return builder.String()
+	return builder.String(), nil
 }
 
-func (r Relation) onManyJoin(parent Relation) string {
-	return fmt.Sprintf("%s = %s", col(r.name(), r.FK), col(parent.name(), parent.PK))
+func (r Relation) onManyJoin(parent Relation, name string) string {
+	return fmt.Sprintf("%s = %s", col(name, r.FK), col(parent.name(), parent.PK))
 }
 
-func (r Relation) onOneJoin(parent Relation) string {
-	return fmt.Sprintf("%s = %s", col(r.name(), r.PK), col(parent.name(), r.FK))
+func (r Relation) onOneJoin(parent Relation, name string) string {
+	return fmt.Sprintf("%s = %s", col(name, r.PK), col(parent.name(), r.FK))
 }
 
-func (r Relation) manyJoin() string {
+func (r Relation) manyJoin(args *[]any) (string, error) {
 	builder := strings.Builder{}
 
 	for _, m := range r.Many {
+		from, err := m.Render(&r, args)
+		if err != nil {
+			return "", err
+		}
+
 		builder.WriteString(fmt.Sprintf("%s lateral (%s) %s on %s",
-			m.JoinType, m.Render(&r), col(m.name()), m.onManyJoin(r)))
+			m.JoinType, from, col(m.name()), m.onManyJoin(r, m.name())))
 	}
 
-	return builder.String()
+	return builder.String(), nil
 }
 
-func (r Relation) join() string {
+func (r Relation) join(args *[]any) (string, error) {
 	builder := strings.Builder{}
 
-	builder.WriteString(r.oneJoin())
-	builder.WriteString(r.manyJoin())
-
-	return builder.String()
-}
-
-func (r Relation) from() string {
-	from := ""
-	if r.SubQuery == "" {
-		from = fmt.Sprintf("%s as %s", col(r.Table), col(r.name()))
-	} else {
-		from = fmt.Sprintf("(%s) %s", r.SubQuery, col(r.name()))
+	one, err := r.oneJoin(args)
+	if err != nil {
+		return "", err
 	}
 
-	return from
+	many, err := r.manyJoin(args)
+	if err != nil {
+		return "", err
+	}
+
+	builder.WriteString(one)
+	builder.WriteString(many)
+
+	return builder.String(), nil
 }
 
-func (r Relation) Render(parent *Relation) string {
+func (r Relation) from(cond string, args *[]any) (string, error) {
+	if r.SubQuery == nil {
+		subQuery := fmt.Sprintf("select *, row_number() over () as jagger_rn from %s", col(r.Table))
+		if cond != "" {
+			subQuery += fmt.Sprintf(" where %s", cond)
+		}
+
+		return fmt.Sprintf("(%s) %s", subQuery, col(r.name())), nil
+	}
+
+	subQuery, subQueryArgs, err := r.SubQuery(cond)
+	if err != nil {
+		return "", err
+	}
+
+	incrementSubQueryBy := len(*args)
+	*args = append(*args, subQueryArgs...)
+
+	subQuery, err = toIncrementedArgsQuery(subQuery, incrementSubQueryBy)
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("(%s) %s", subQuery, col(r.name())), nil
+}
+
+func (r Relation) Render(parent *Relation, args *[]any) (string, error) {
 	builder := strings.Builder{}
 	builder.WriteString("select ")
 
@@ -181,16 +223,31 @@ func (r Relation) Render(parent *Relation) string {
 		builder.WriteString(fmt.Sprintf("%s, ", col(r.name(), r.FK)))
 	}
 
-	builder.WriteString(fmt.Sprintf("%s from %s ", r.jsonAgg(), r.from()))
-	builder.WriteString(r.join())
+	var joinCond string
+	if parent != nil {
+		joinCond = r.onManyJoin(*parent, r.Table)
+	}
+	from, err := r.from(joinCond, args)
+	if err != nil {
+		return "", err
+	}
+
+	builder.WriteString(fmt.Sprintf("%s from lateral %s ", r.jsonAgg(), from))
+
+	join, err := r.join(args)
+	if err != nil {
+		return "", err
+	}
+
+	builder.WriteString(join)
 
 	if parent != nil {
-		builder.WriteString(fmt.Sprintf("where %s", r.onManyJoin(*parent)))
+		builder.WriteString(fmt.Sprintf("where %s", r.onManyJoin(*parent, r.name())))
 	}
 
 	if r.FK != "" {
 		builder.WriteString(fmt.Sprintf(" group by %s", col(r.name(), r.FK)))
 	}
 
-	return builder.String()
+	return builder.String(), nil
 }
